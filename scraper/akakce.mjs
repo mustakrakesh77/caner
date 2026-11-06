@@ -61,11 +61,27 @@ export function parseProduct(html) {
   return null;
 }
 
-export async function get(url) {
-  const r = await fetch(url, {
-    headers: { "User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9", Accept: "text/html" },
-    redirect: "follow",
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
-  return r.text();
+const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+// Zaman aşımı + yeniden deneme: geçici hatalarda (429/5xx/ağ) 3 kereye kadar dener.
+export async function get(url, tries = 3, baseDelay = 2000) {
+  let lastErr;
+  for (let n = 1; n <= tries; n++) {
+    try {
+      const r = await fetch(url, {
+        headers: { "User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9", Accept: "text/html" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(25000),
+      });
+      if (r.ok) return await r.text();
+      const err = new Error(`HTTP ${r.status} ${url}`);
+      err.retry = RETRY_STATUS.has(r.status);
+      throw err;
+    } catch (e) {
+      lastErr = e;
+      if (e.retry === false || n === tries) break;
+      await new Promise((res) => setTimeout(res, baseDelay * n + Math.random() * 1000));
+    }
+  }
+  throw lastErr;
 }

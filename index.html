@@ -4,16 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Çeyiz Listesi</title>
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#f4eee4">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="hero">
   <div class="hero-top">
-    <h1>🏠 Çeyiz Listesi</h1>
-    <div class="who">Ekleyen: <button id="whoBtn" type="button">—</button></div>
+    <div>
+      <div class="eyebrow">Ortak ev listemiz</div>
+      <h1>Çeyiz <em>Listesi</em></h1>
+    </div>
+    <div class="who">Ekleyen<br><button id="whoBtn" type="button">—</button></div>
   </div>
   <section id="budget" class="bud" aria-label="Bütçe"></section>
 </header>
@@ -46,6 +52,7 @@
     <button id="tokReset" type="button" class="linkbtn" hidden>anahtarı sıfırla</button>
   </div>
 
+  <div id="stale" class="notice" hidden></div>
   <div id="summary" class="summary"></div>
   <div id="items"></div>
 </main>

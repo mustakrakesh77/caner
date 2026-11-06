@@ -56,7 +56,10 @@ for (const it of items) {
     ok++;
     console.log(`✓ ${it.name}: ${p.price} TL (${p.store})`);
   } catch (e) {
-    patch.last_error = String(e.message || e).slice(0, 200);
+    const raw = String(e.message || e);
+    patch.last_error = /HTTP (403|429)/.test(raw)
+      ? "Akakçe geçici olarak engelledi, sonraki taramada tekrar denenecek (son fiyat korunuyor)"
+      : /timeout|aborted/i.test(raw) ? "Akakçe zamanında yanıt vermedi, sonraki taramada tekrar denenecek" : raw.slice(0, 200);
     fail++;
     console.log(`✗ ${it.name}: ${patch.last_error}`);
   }

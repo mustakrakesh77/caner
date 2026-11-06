@@ -80,7 +80,7 @@
     const open = items.filter((i) => !i.purchased), done = items.filter((i) => i.purchased);
     const spent = done.reduce((s, i) => s + line(i), 0);
     const pend = open.reduce((s, i) => s + line(i), 0);
-    let html = `<div class="bud-top"><span>Bütçe</span><button id="budEdit" type="button">${budget != null ? tl(budget) : "Belirle"} <small>✎ düzenle</small></button></div>`;
+    let html = `<div class="bud-top"><span>Bütçe</span><button id="budEdit" type="button">${budget != null ? tl(budget) : "Belirle"} <small>düzenle</small></button></div>`;
     if (budget != null && budget > 0) {
       const sp = Math.min(100, (spent / budget) * 100);
       const pp = Math.min(100 - sp, (pend / budget) * 100);
@@ -150,10 +150,11 @@
     const d = dropPct(i);
     if (d) h += `<span class="badge b-down">↓ %${d}</span>`;
     else if (unit(i) != null && num(i.prev_price) != null && unit(i) > num(i.prev_price)) h += `<span class="badge b-up">↑ %${Math.round(((unit(i) - num(i.prev_price)) / num(i.prev_price)) * 100)}</span>`;
-    if (isLowest(i)) h += `<span class="badge b-low">🏆 en düşük</span>`;
-    if (hitTarget(i)) h += `<span class="badge b-hit">🎯 hedefte</span>`;
+    if (isLowest(i)) h += `<span class="badge b-low">En düşük</span>`;
+    if (hitTarget(i)) h += `<span class="badge b-hit">Hedefte</span>`;
     return h;
   }
+  const mono = (i) => (String(i.name || "?").trim().charAt(0) || "?").toLocaleUpperCase("tr");
   const imgTag = (i) => i.image_url && /^https:\/\//.test(i.image_url)
     ? `<img src="${esc(i.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
 
@@ -161,11 +162,11 @@
     const c = unit(i), p = num(i.prev_price), q = qty(i);
     const tags = [
       `<span class="tag ${prioOf(i)}">${prioOf(i) === "sart" ? "Şart" : "Olsa iyi"}</span>`,
-      i.assignee ? `<span class="tag who">👤 ${esc(i.assignee)}</span>` : "",
-      i.note ? `<span class="tag" title="${esc(i.note)}">📝 not</span>` : "",
+      i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
+      i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
     ].join("");
     return `<article class="gcard ${i.purchased ? "done" : ""}" data-id="${i.id}" tabindex="0">
-      <div class="imgwrap"><span class="ph">📦</span>${imgTag(i)}
+      <div class="imgwrap"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}
         <div class="ov">${overlayBadges(i)}</div>
         <button type="button" class="quick" data-act="${i.purchased ? "undo" : "buy"}" data-id="${i.id}" aria-label="${i.purchased ? "Geri al" : "Aldık olarak işaretle"}">${i.purchased ? "↩" : "✓"}</button>
       </div>
@@ -187,6 +188,10 @@
     $("#cBought").textContent = items.filter((i) => i.purchased).length;
     const last = items.map((i) => i.last_checked).filter(Boolean).sort().pop();
     $("#lastScan").textContent = last ? "Son tarama: " + fmt(last) : "Henüz taranmadı";
+    const hrs = last ? (Date.now() - new Date(last).getTime()) / 3600000 : 0;
+    const stale = $("#stale");
+    stale.hidden = !(open.length && last && hrs > 5);
+    if (!stale.hidden) stale.textContent = `Son tarama ${Math.floor(hrs)} saat önce yapıldı, otomatik tarama gecikmiş olabilir. "Fiyatları yenile"ye basabilirsin.`;
 
     const list = visible();
     const total = list.reduce((s, i) => s + line(i), 0);
@@ -267,7 +272,7 @@
          <button type="button" class="btn" data-act="ok">Doğru</button><button type="button" class="btn" data-act="fix">Yanlış, link gireceğim</button></div>` : "";
     $("#detail").innerHTML = `
       <div class="sheet-head"><h2>Ürün detayı</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
-      <div class="d-img"><span class="ph">📦</span>${imgTag(i)}</div>
+      <div class="d-img"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}</div>
       <input id="dName" class="d-name" value="${esc(i.name)}" aria-label="Ürün adı">
       <div class="d-price"><b>${tl(c)}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 && c != null ? `<span>× ${q} = <b style="font-size:18px">${tl(c * q)}</b></span>` : ""}</div>
       <div class="d-badges">${overlayBadges(i)}</div>
