@@ -39,7 +39,8 @@
   // ---------- kategoriler ----------
   const CATS = (window.Categories && Categories.LIST) || [];
   const catLabel = (c) => (!c || c === "Genel" ? "Ayrılacak" : c);
-  const catOf = (i) => i.category || "Genel";
+  const canon = (c) => (window.Categories ? Categories.canon(c) : c);
+  const catOf = (i) => canon(i.category) || "Genel";
   const catOrder = (c) => (c === "Genel" ? 999 : CATS.includes(c) ? CATS.indexOf(c) : 500);
   const allCats = () => {
     const extra = [...new Set(items.map(catOf))].filter((c) => c !== "Genel" && !CATS.includes(c)).sort((a, b) => a.localeCompare(b, "tr"));
@@ -117,7 +118,7 @@
       html += `<div class="bud-nums" style="margin-top:8px"><span>Harcanan <b>${tl(spent)}</b></span><span>Bekleyen <b>${tl(pend)}</b></span></div>`;
     }
     const cats = {};
-    items.forEach((i) => { const c = i.category || "Genel"; cats[c] = (cats[c] || 0) + line(i); });
+    items.forEach((i) => { const c = catOf(i); cats[c] = (cats[c] || 0) + line(i); });
     const entries = Object.entries(cats).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
     if (entries.length) {
       const max = entries[0][1];

@@ -39,6 +39,14 @@
     return null;
   }
 
-  g.Categories = { LIST, guess, norm };
+  // "elektronik" / "ELEKTRONİK" gibi yazımları listedeki resmi ada çevirir; listede yoksa olduğu gibi bırakır.
+  function canon(c) {
+    if (!c) return c;
+    const n = norm(c);
+    if (n === "genel") return "Genel";
+    return LIST.find((x) => norm(x) === n) || String(c).trim();
+  }
+
+  g.Categories = { LIST, guess, norm, canon };
   if (typeof module !== "undefined" && module.exports) module.exports = g.Categories;
 })(typeof window !== "undefined" ? window : globalThis);
