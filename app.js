@@ -11,7 +11,7 @@
   let budget = null;
   let tab = "list";
   let openId = null;
-  const F = { q: "", prio: "all", who: "all", cat: "all", pick: "all", sort: "cat" };
+  const F = { q: "", prio: "all", who: "all", cat: "all", pick: "all", fresh: "all", appr: "all", sort: "cat" };
   let offerMode = "all"; // mağaza listesi: "all" | "big"
   try { offerMode = localStorage.getItem("offerMode") === "big" ? "big" : "all"; } catch {}
   let offersOpen = false;
@@ -71,6 +71,57 @@
   const getWho = () => { try { return localStorage.getItem("who") || ""; } catch { return ""; } };
   const setWho = (v) => { try { localStorage.setItem("who", v); } catch {} };
   function renderWho() { $("#whoBtn").textContent = getWho() || "ismini yaz"; }
+
+  // ---------- ortak onay + "yeni" rozeti ----------
+  const me = () => getWho().trim();
+  const lc = (x) => String(x || "").trim().toLocaleLowerCase("tr");
+  const apprOf = (i) => [...new Set((Array.isArray(i.approvals) ? i.approvals : []).map((n) => String(n).trim()).filter(Boolean))];
+  const iApproved = (i) => !!me() && apprOf(i).some((n) => lc(n) === lc(me()));
+  const needsMyOk = (i) => !i.purchased && apprOf(i).length > 0 && !iApproved(i); // biri istemiş, ben henüz bakmadım
+  // Son ziyaretten beri başkasının eklediği ("new") ya da değiştirdiği ("chg") ürün. İlk ziyarette hiçbir şey "yeni" sayılmaz.
+  let baseline = 0;
+  try { baseline = Number(localStorage.getItem("lastVisit")) || 0; localStorage.setItem("lastVisit", String(Date.now())); } catch {}
+  const stamp = () => { try { localStorage.setItem("lastVisit", String(Date.now())); } catch {} };
+  window.addEventListener("pagehide", stamp);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stamp();
+    else { try { baseline = Number(localStorage.getItem("lastVisit")) || baseline; } catch {} }
+  });
+  const freshOf = (i) => {
+    if (!baseline) return "";
+    if (lc(i.added_by) && lc(i.added_by) !== lc(me()) && +new Date(i.created_at) > baseline) return "new";
+    if (i.updated_at && lc(i.updated_by) && lc(i.updated_by) !== lc(me()) && +new Date(i.updated_at) > baseline) return "chg";
+    return "";
+  };
+
+  // ---------- tema ----------
+  const THEMES = [["auto", "Otomatik", "#b9b0a3"], ["krem", "Krem", "#a5573c"], ["koyu", "Koyu", "#2a2420"], ["sage", "Adaçayı", "#4d6b4f"], ["lacivert", "Lacivert", "#e0a458"]];
+  const getTheme = () => { try { return localStorage.getItem("theme") || "auto"; } catch { return "auto"; } };
+  function applyTheme(t) {
+    const root = document.documentElement;
+    if (t === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
+    try { localStorage.setItem("theme", t); } catch {}
+    const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m && bg) m.setAttribute("content", bg);
+    $("#themeMenu").innerHTML = THEMES.map(([k, l, c]) => `<button type="button" data-t="${k}" class="${k === t ? "on" : ""}"><i style="background:${c}"></i>${l}</button>`).join("");
+  }
+  $("#themeBtn").onclick = (e) => { e.stopPropagation(); $("#themeMenu").hidden = !$("#themeMenu").hidden; };
+  $("#themeMenu").onclick = (e) => { const b = e.target.closest("[data-t]"); if (b) { applyTheme(b.dataset.t); $("#themeMenu").hidden = true; } };
+  document.addEventListener("click", (e) => { if (!e.target.closest("#themeMenu,#themeBtn")) $("#themeMenu").hidden = true; });
+  applyTheme(getTheme());
+
+  // ---------- küçük bildirim (geri al düğmeli) ----------
+  let toastTimer;
+  function toast(msg, label, fn) {
+    $("#toastMsg").textContent = msg;
+    const b = $("#toastBtn");
+    b.hidden = !label; b.textContent = label || "";
+    b.onclick = () => { $("#toast").hidden = true; if (fn) fn(); };
+    $("#toast").hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => ($("#toast").hidden = true), 6000);
+  }
   $("#whoBtn").onclick = () => {
     const v = prompt("Adın ne? (ürünü kimin eklediği görünsün)", getWho());
     if (v != null) { setWho(v.trim()); renderWho(); }
@@ -102,8 +153,9 @@
     render();
   }
 
+  const stampPatch = (patch) => ({ ...patch, updated_at: new Date().toISOString(), updated_by: me() || null });
   async function upd(id, patch) {
-    const { error } = await db.from("items").update(patch).eq("id", id);
+    const { error } = await db.from("items").update(stampPatch(patch)).eq("id", id);
     if (error) alert("Kaydedilemedi: " + error.message + (/column|schema/i.test(error.message) ? "\n\nSupabase'de yeni sütunlar eksik olabilir (supabase/schema.sql v2 bölümü)." : ""));
     await load();
     return !error;
@@ -124,16 +176,37 @@
     } else {
       html += `<div class="bud-nums" style="margin-top:8px"><span>Harcanan <b>${tl(spent)}</b></span><span>Bekleyen <b>${tl(pend)}</b></span></div>`;
     }
-    const cats = {};
-    items.forEach((i) => { const c = catOf(i); cats[c] = (cats[c] || 0) + line(i); });
-    const entries = Object.entries(cats).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-    if (entries.length) {
-      const max = entries[0][1];
-      html += `<details><summary>Kategorilere göre</summary>${entries.map(([c, v]) => `<div class="cat-row"><span>${esc(catLabel(c))}</span><div class="t"><i style="width:${Math.max(4, (v / max) * 100)}%"></i></div><b>${tl(v)}</b></div>`).join("")}</details>`;
+    // Oda kartları: her kategori için kaç ürün alındı, ne kadar tutuyor. Karta dokununca o kategoriye süzülür.
+    const rooms = {};
+    items.forEach((i) => {
+      const r = (rooms[catOf(i)] ||= { n: 0, done: 0, spent: 0, plan: 0 });
+      r.n++;
+      if (i.purchased) { r.done++; r.spent += line(i); } else r.plan += line(i);
+    });
+    const keys = Object.keys(rooms).sort((x, y) => catOrder(x) - catOrder(y) || x.localeCompare(y, "tr"));
+    if (keys.length) {
+      html += `<div class="rooms">${keys.map((c) => {
+        const r = rooms[c], pct = r.n ? Math.round((r.done / r.n) * 100) : 0;
+        return `<button type="button" class="room ${F.cat === c ? "on" : ""}" data-room="${esc(c)}" aria-label="${esc(catLabel(c))}: ${r.n} üründen ${r.done} alındı">
+          <span class="rname">${esc(catLabel(c))}</span><span class="rcount">${r.done}<small>/${r.n}</small></span>
+          <span class="rbar"><i style="width:${pct}%"></i></span><span class="rmoney">${tl(r.spent + r.plan)}</span></button>`;
+      }).join("")}</div>`;
     }
     $("#budget").innerHTML = html;
   }
   $("#budget").onclick = async (e) => {
+    const rm = e.target.closest(".room");
+    if (rm) {
+      const c = rm.dataset.room;
+      if (F.cat === c) F.cat = "all";
+      else {
+        F.cat = c;
+        const hasOpen = items.some((i) => !i.purchased && catOf(i) === c);
+        if (!hasOpen && items.some((i) => i.purchased && catOf(i) === c)) setTab("bought"); // hepsi alınmışsa Alınanlar'a geç
+      }
+      render();
+      return;
+    }
     if (!e.target.closest("#budEdit")) return;
     const v = prompt("Toplam bütçen kaç ₺? (boş bırakırsan bütçeyi kaldırır)", budget != null ? String(budget) : "");
     if (v === null) return;
@@ -153,6 +226,13 @@
     const nPick = items.filter((i) => !i.purchased && needsPick(i)).length;
     if (F.pick === "1" && !nPick) F.pick = "all";
     if (nPick) h += `<span class="sep"></span>` + chip("pick", "1", `Eşleşme seç (${nPick})`);
+    const open0 = items.filter((i) => !i.purchased);
+    const nFresh = open0.filter((i) => freshOf(i)).length, nAppr = open0.filter(needsMyOk).length;
+    if (F.fresh === "1" && !nFresh) F.fresh = "all";
+    if (F.appr === "1" && !nAppr) F.appr = "all";
+    if (nFresh || nAppr) h += `<span class="sep"></span>`;
+    if (nFresh) h += chip("fresh", "1", `Yeni (${nFresh})`);
+    if (nAppr) h += chip("appr", "1", `Onayımı bekleyen (${nAppr})`);
     $("#chips").innerHTML = h;
     fillCategorySelects();
     const names = new Set([...people, ...items.map((i) => (i.added_by || "").trim()).filter(Boolean), getWho()].filter(Boolean));
@@ -161,7 +241,8 @@
   $("#chips").onclick = (e) => {
     const b = e.target.closest(".chip");
     if (!b) return;
-    F[b.dataset.kind] = b.dataset.kind === "pick" && F.pick === b.dataset.val ? "all" : b.dataset.val; // Eşleşme çipi aç/kapa
+    const k = b.dataset.kind;
+    F[k] = ["pick", "fresh", "appr"].includes(k) && F[k] === b.dataset.val ? "all" : b.dataset.val; // bu çipler aç/kapa
     render();
   };
   $("#q").oninput = (e) => { F.q = e.target.value; render(); };
@@ -178,6 +259,8 @@
     if (F.who !== "all") list = list.filter((i) => (i.assignee || "").trim() === F.who);
     if (F.cat !== "all") list = list.filter((i) => catOf(i) === F.cat);
     if (F.pick === "1") list = list.filter(needsPick);
+    if (F.fresh === "1") list = list.filter((i) => freshOf(i));
+    if (F.appr === "1") list = list.filter(needsMyOk);
     const byPrice = (a, b) => (unit(a) ?? Infinity) - (unit(b) ?? Infinity);
     if (F.sort === "price-asc") list = [...list].sort(byPrice);
     else if (F.sort === "price-desc") list = [...list].sort((a, b) => (unit(b) ?? -1) - (unit(a) ?? -1));
@@ -186,7 +269,9 @@
   }
 
   function overlayBadges(i) {
-    let h = needsPick(i) ? `<span class="badge b-pick">Aday seç</span>` : "";
+    const fr = freshOf(i);
+    let h = fr ? `<span class="badge b-new">${fr === "new" ? "Yeni" : "Güncellendi"}</span>` : "";
+    if (needsPick(i)) h += `<span class="badge b-pick">Aday seç</span>`;
     const d = dropPct(i);
     if (d) h += `<span class="badge b-down">↓ %${d}</span>`;
     else if (unit(i) != null && num(i.prev_price) != null && unit(i) > num(i.prev_price)) h += `<span class="badge b-up">↑ %${Math.round(((unit(i) - num(i.prev_price)) / num(i.prev_price)) * 100)}</span>`;
@@ -201,13 +286,16 @@
   function gcard(i) {
     const c = unit(i), p = num(i.prev_price), q = qty(i);
     const bb = bigBest(i);
+    const na = apprOf(i).length;
     const tags = [
+      na >= 2 ? `<span class="tag ok2" title="${esc(apprOf(i).join(", "))}">Ortak ✓✓</span>` : needsMyOk(i) ? `<span class="tag ask" title="${esc(apprOf(i).join(", "))} istiyor">Onayını bekliyor</span>` : na === 1 ? `<span class="tag" title="${esc(apprOf(i).join(", "))}">1 onay</span>` : "",
       i.akakce_url && !i.match_confirmed ? `<span class="tag chk">Kontrol et</span>` : "",
       `<span class="tag ${prioOf(i)}">${prioOf(i) === "sart" ? "Şart" : "Olsa iyi"}</span>`,
       i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
       i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
     ].join("");
     return `<article class="gcard ${i.purchased ? "done" : ""} ${selMode ? "selectable" : ""} ${sel.has(i.id) ? "picked" : ""}" data-id="${i.id}" tabindex="0">
+      <div class="swipehint" aria-hidden="true"></div>
       <div class="imgwrap"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}<span class="pick" aria-hidden="true">✓</span>
         <div class="ov">${overlayBadges(i)}</div>
         <button type="button" class="quick" data-act="${i.purchased ? "undo" : "buy"}" data-id="${i.id}" aria-label="${i.purchased ? "Geri al" : "Aldık olarak işaretle"}">${i.purchased ? "↩" : "✓"}</button>
@@ -222,9 +310,25 @@
     </article>`;
   }
 
+  // Fırsat şeridi: indirimdeki / hedefe inen / en düşük fiyatlı ürünler, yatay kayar.
+  function renderDeals() {
+    const el = $("#dealstrip");
+    const deals = items.filter((i) => !i.purchased && isDeal(i)).sort((a, b) => dropPct(b) - dropPct(a) || (unit(a) ?? 0) - (unit(b) ?? 0)).slice(0, 12);
+    el.hidden = !deals.length;
+    if (!deals.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `<div class="strip-title">Fırsatlar <small>${deals.length}</small></div><div class="strip">${deals.map((i) => {
+      const d = dropPct(i);
+      const tag = d ? `↓ %${d}` : isLowest(i) ? "En düşük" : "Hedefte";
+      return `<button type="button" class="dcard" data-id="${i.id}"><span class="dthumb"><b>${esc(mono(i))}</b>${imgTag(i)}</span>
+        <span class="dtxt"><span class="dname">${esc(i.name)}</span><span class="dprice">${tl(unit(i))}<em>${tag}</em></span></span></button>`;
+    }).join("")}</div>`;
+  }
+  $("#dealstrip").onclick = (e) => { const b = e.target.closest(".dcard"); if (b) openDetail(b.dataset.id); };
+
   function render() {
     renderBudget();
     renderChips();
+    renderDeals();
     const open = items.filter((i) => !i.purchased);
     $("#cList").textContent = open.length;
     $("#cDeals").textContent = open.filter(isDeal).length;
@@ -241,7 +345,7 @@
     $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""}` : "";
 
     if (!list.length) {
-      const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all" || F.pick !== "all";
+      const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all" || F.pick !== "all" || F.fresh !== "all" || F.appr !== "all";
       $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
     } else if (F.sort === "cat") {
       const groups = {};
@@ -257,14 +361,17 @@
     }
   }
 
-  document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => {
-    tab = b.dataset.tab;
+  function setTab(t) {
+    tab = t;
     sel.clear();
-    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.tab === t));
     render();
-  }));
+  }
+  document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
 
+  let suppressClick = false; // kaydırma hareketinden sonra kartın açılmasını engeller
   $("#items").onclick = async (e) => {
+    if (suppressClick) return;
     const card0 = e.target.closest(".gcard");
     if (selMode) {
       if (!card0) return;
@@ -278,11 +385,65 @@
     if (q) {
       e.stopPropagation();
       const id = q.dataset.id;
-      return upd(id, q.dataset.act === "buy" ? { purchased: true, purchased_at: new Date().toISOString() } : { purchased: false, purchased_at: null });
+      return setBought(id, q.dataset.act === "buy");
     }
     const card = e.target.closest(".gcard");
     if (card) openDetail(card.dataset.id);
   };
+  // "Aldık" / "Geri al": yanlışlıkla basılırsa 6 saniye boyunca geri alınabilir.
+  async function setBought(id, bought) {
+    const it = items.find((x) => x.id === id);
+    const ok = await upd(id, bought ? { purchased: true, purchased_at: new Date().toISOString() } : { purchased: false, purchased_at: null });
+    if (ok && it) toast(`${String(it.name).slice(0, 40)} ${bought ? "alındı olarak işaretlendi" : "listeye geri döndü"}`, "Geri al", () => setBought(id, !bought));
+  }
+
+  // ---------- kaydırarak işlem: sağa = Aldık / Geri al, sola = Sil (telefon/kalem; fare ile değil) ----------
+  let sw = null;
+  $("#items").addEventListener("pointerdown", (e) => {
+    if (selMode || e.pointerType === "mouse") return;
+    const card = e.target.closest(".gcard");
+    if (!card || e.target.closest(".quick")) return;
+    sw = { card, id: card.dataset.id, x0: e.clientX, y0: e.clientY, dx: 0, active: false, pid: e.pointerId };
+  });
+  $("#items").addEventListener("pointermove", (e) => {
+    if (!sw || e.pointerId !== sw.pid) return;
+    const dx = e.clientX - sw.x0, dy = e.clientY - sw.y0;
+    if (!sw.active) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; } // dikey: sayfa kaydırılıyor
+      if (Math.abs(dx) < 12) return;
+      sw.active = true;
+      sw.card.classList.add("swiping");
+      try { sw.card.setPointerCapture(e.pointerId); } catch {}
+    }
+    sw.dx = dx;
+    sw.card.style.transform = `translateX(${dx}px) rotate(${dx / 50}deg)`;
+    const h = sw.card.querySelector(".swipehint");
+    h.className = "swipehint " + (dx > 0 ? "buy" : "del");
+    h.textContent = dx > 0 ? (tab === "bought" ? "↩ Geri al" : "✓ Aldık") : "Sil";
+    h.style.opacity = Math.min(1, Math.abs(dx) / 110);
+  });
+  const resetSwipe = (s) => {
+    s.card.classList.remove("swiping");
+    s.card.style.transform = "";
+    const h = s.card.querySelector(".swipehint");
+    if (h) h.style.opacity = 0;
+  };
+  $("#items").addEventListener("pointerup", async (e) => {
+    if (!sw || e.pointerId !== sw.pid) return;
+    const s = sw; sw = null;
+    if (!s.active) return;
+    suppressClick = true; setTimeout(() => (suppressClick = false), 60);
+    resetSwipe(s);
+    if (Math.abs(s.dx) < 110) return;
+    if (s.dx > 0) return setBought(s.id, tab !== "bought");
+    const it = items.find((x) => x.id === s.id);
+    if (!confirm(`"${String((it && it.name) || "Ürün").slice(0, 60)}" listeden silinsin mi? Bu geri alınamaz.`)) return;
+    const { error } = await db.from("items").delete().eq("id", s.id);
+    if (error) alert("Silinemedi: " + error.message);
+    await load();
+  });
+  $("#items").addEventListener("pointercancel", () => { if (sw) { if (sw.active) resetSwipe(sw); sw = null; } });
+
   $("#items").onkeydown = (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("gcard")) { e.preventDefault(); e.target.click(); }
   };
@@ -303,7 +464,7 @@
     $("#selBuy").textContent = tab === "bought" ? "Geri al" : "Aldık";
   }
   async function bulk(patch) {
-    const { error } = await db.from("items").update(patch).in("id", [...sel]);
+    const { error } = await db.from("items").update(stampPatch(patch)).in("id", [...sel]);
     if (error) alert("Kaydedilemedi: " + error.message);
     return !error;
   }
@@ -356,6 +517,8 @@
       target_price: $("#fTarget").value ? Number($("#fTarget").value) : null,
       note: $("#fNote").value.trim() || null,
       added_by: getWho() || null,
+      approvals: me() ? [me()] : [],   // ekleyen kişi ürünü zaten istiyor
+      updated_by: me() || null,
     };
     const { error } = await db.from("items").insert(row);
     if (error) return alert("Eklenemedi: " + error.message + (/column|schema/i.test(error.message) ? "\n\nSupabase'de yeni sütunlar eksik (supabase/schema.sql v2 bölümü)." : ""));
@@ -424,6 +587,11 @@
       <input id="dName" class="d-name" value="${esc(i.name)}" aria-label="Ürün adı">
       <div class="d-price"><b>${tl(c)}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 && c != null ? `<span>× ${q} = <b style="font-size:18px">${tl(c * q)}</b></span>` : ""}</div>
       <div class="d-badges">${overlayBadges(i)}</div>
+      <div class="sec">Ortak karar</div>
+      <div class="appr">
+        <div class="apprwho">${apprOf(i).length ? apprOf(i).map((n) => `<span class="tag ok">✓ ${esc(n)}</span>`).join(" ") : `<span class="hint" style="padding:0">Henüz kimse "istiyorum" demedi.</span>`}</div>
+        <button type="button" class="btn ${iApproved(i) ? "" : "buy"}" data-act="appr">${iApproved(i) ? "Onayımı geri çek" : "Ben de istiyorum"}</button>
+      </div>
       ${c != null ? `<div class="hint" style="padding:0">En ucuz: ${i.best_url ? `<a href="${esc(safeUrl(i.best_url))}" target="_blank" rel="noopener">${esc(i.best_store || "")}</a>` : esc(i.best_store || "")}${i.last_checked ? " · tarandı " + fmt(i.last_checked) : ""}</div>` : `<div class="hint" style="padding:0">İlk tarama bekleniyor (en geç 2 saat). Üstteki "Fiyatları yenile" ile hemen başlatabilirsin.</div>`}
       ${warn}
       ${candBlock(i)}
@@ -519,7 +687,13 @@
     } else if (act === "buy") { await upd(id, { purchased: true, purchased_at: new Date().toISOString() }); detailDlg.close(); }
     else if (act === "undo") { await upd(id, { purchased: false, purchased_at: null }); detailDlg.close(); }
     else if (act === "ok") { await upd(id, { match_confirmed: true, match_state: "confirmed", match_note: null }); openDetail(id); }
-    else if (act === "offers-all" || act === "offers-big") {
+    else if (act === "appr") {
+      const it = items.find((x) => x.id === id);
+      if (!me()) return alert("Önce adını yaz: sağ üstteki \"Ekleyen\" yazısına dokun.");
+      const cur = apprOf(it);
+      await upd(id, { approvals: iApproved(it) ? cur.filter((n) => lc(n) !== lc(me())) : [...cur, me()] });
+      openDetail(id);
+    } else if (act === "offers-all" || act === "offers-big") {
       offerMode = act === "offers-big" ? "big" : "all";
       try { localStorage.setItem("offerMode", offerMode); } catch {}
       offersOpen = false;

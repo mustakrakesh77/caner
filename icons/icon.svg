@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f6f5c"/><path d="M12 32 32 14l20 18v18H38V38H26v12H12z" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112.64" fill="#a5573c"/>
+  <text x="256" y="340.88960000000003" text-anchor="middle" font-family="Fraunces, Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="317.44" fill="#f4eee4">Ç</text>
+  <rect x="174.08" y="453.12" width="163.84" height="6.144" fill="#f4eee4" opacity="0.8"/>
+</svg>

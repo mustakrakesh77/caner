@@ -1,18 +1,44 @@
 /* Çeyiz Listesi — "ev dekoru dergisi" teması: krem zemin, serif başlık/fiyat, ince çizgiler */
+/* Temalar: varsayılan Krem; "Otomatik" telefonun karanlık ayarını izler; Koyu / Adaçayı / Lacivert elle seçilir. */
 :root{
   --serif:"Fraunces",Georgia,"Times New Roman",serif;
   --sans:"DM Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
   --bg:#f4eee4;--surface:#fbf8f2;--ink:#2a2420;--mute:#7a6f64;--line:#ddd2c2;--line-strong:#2a2420;
   --accent:#a5573c;--accent-soft:#efdcd2;--on-accent:#fff;
   --sage:#566b4f;--sage-soft:#e1e8d9;--ochre:#8a6a1f;--ochre-soft:#f1e5c3;--rust:#a5573c;
   --photo:#fff;
 }
-@media (prefers-color-scheme:dark){:root{
+:root[data-theme="krem"]{
+  color-scheme:light;
+  --bg:#f4eee4;--surface:#fbf8f2;--ink:#2a2420;--mute:#7a6f64;--line:#ddd2c2;--line-strong:#2a2420;
+  --accent:#a5573c;--accent-soft:#efdcd2;--on-accent:#fff;
+  --sage:#566b4f;--sage-soft:#e1e8d9;--ochre:#8a6a1f;--ochre-soft:#f1e5c3;--rust:#a5573c;--photo:#fff;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme]){
+  color-scheme:dark;
   --bg:#1c1814;--surface:#25201b;--ink:#efe7da;--mute:#a99d8e;--line:#3a332b;--line-strong:#efe7da;
   --accent:#d9876a;--accent-soft:#3d2a22;--on-accent:#1c1814;
-  --sage:#a9c49e;--sage-soft:#26311f;--ochre:#e3be6a;--ochre-soft:#3a2f14;--rust:#e79a7f;
-  --photo:#f3eee6;
+  --sage:#a9c49e;--sage-soft:#26311f;--ochre:#e3be6a;--ochre-soft:#3a2f14;--rust:#e79a7f;--photo:#f3eee6;
 }}
+:root[data-theme="koyu"]{
+  color-scheme:dark;
+  --bg:#1c1814;--surface:#25201b;--ink:#efe7da;--mute:#a99d8e;--line:#3a332b;--line-strong:#efe7da;
+  --accent:#d9876a;--accent-soft:#3d2a22;--on-accent:#1c1814;
+  --sage:#a9c49e;--sage-soft:#26311f;--ochre:#e3be6a;--ochre-soft:#3a2f14;--rust:#e79a7f;--photo:#f3eee6;
+}
+:root[data-theme="sage"]{
+  color-scheme:light;
+  --bg:#eaefe4;--surface:#f6f9f2;--ink:#223026;--mute:#667a6c;--line:#cfdac8;--line-strong:#223026;
+  --accent:#4a6b4e;--accent-soft:#d9e7d4;--on-accent:#fff;
+  --sage:#3b6244;--sage-soft:#d9e7d4;--ochre:#7d6420;--ochre-soft:#efe6c4;--rust:#a4553d;--photo:#fff;
+}
+:root[data-theme="lacivert"]{
+  color-scheme:dark;
+  --bg:#101a2b;--surface:#18243b;--ink:#e8edf7;--mute:#92a1bd;--line:#26344f;--line-strong:#e8edf7;
+  --accent:#e0a458;--accent-soft:#3a3120;--on-accent:#101a2b;
+  --sage:#8fc5a6;--sage-soft:#17332a;--ochre:#e3be6a;--ochre-soft:#3a2f14;--rust:#f08f7a;--photo:#f1eee8;
+}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);padding-bottom:calc(96px + env(safe-area-inset-bottom))}
@@ -211,3 +237,62 @@ body.selmode #fab,.selmode .quick{display:none}
 .cinfo small{display:block;font-size:11.5px;color:var(--mute);margin-top:2px}
 .curmark{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--accent)}
 .cand .btn{padding:7px 10px}
+
+/* Tema düğmesi */
+.hero-right{display:flex;align-items:flex-end;gap:14px;position:relative}
+.themebtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line-strong);background:none;font-size:17px;line-height:1;padding:0 0 2px;color:var(--ink)}
+.thememenu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;background:var(--surface);border:1px solid var(--line-strong);padding:6px;display:grid;min-width:170px;box-shadow:0 10px 28px rgba(0,0,0,.25)}
+.thememenu[hidden]{display:none}
+.thememenu button{display:flex;align-items:center;gap:10px;background:none;border:0;padding:10px;text-align:left;font-size:13px;letter-spacing:.04em}
+.thememenu button.on{font-weight:700;background:var(--accent-soft)}
+.thememenu i{width:16px;height:16px;border-radius:50%;border:1px solid rgba(128,128,128,.5);display:inline-block}
+
+/* Oda kartları */
+.rooms{display:flex;gap:10px;overflow-x:auto;margin:14px -18px 0;padding:2px 18px 6px;scroll-snap-type:x proximity;scroll-padding:0 18px;scrollbar-width:none}
+.rooms::-webkit-scrollbar{display:none}
+.room{flex:none;width:132px;scroll-snap-align:start;display:grid;gap:5px;text-align:left;background:var(--bg);border:1px solid var(--line);padding:10px 11px;color:var(--ink)}
+.room.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.rname{font:italic 400 16px/1.1 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rcount{font:500 22px/1 var(--serif)}
+.rcount small{font:400 12px var(--sans);color:var(--mute);margin-left:2px}
+.rbar{height:3px;background:var(--line);display:block}
+.rbar i{display:block;height:100%;background:var(--accent)}
+.rmoney{font-size:11px;letter-spacing:.06em;color:var(--mute)}
+@media(min-width:700px){.rooms{flex-wrap:wrap;overflow:visible;margin:14px 0 0;padding:0}.room{width:calc(25% - 8px)}}
+
+/* Fırsat şeridi */
+.dealstrip{margin:0 0 20px}
+.strip-title{font:italic 400 22px var(--serif);margin:0 0 10px;display:flex;align-items:baseline;gap:8px}
+.strip-title small{font:700 11px var(--sans);color:var(--accent)}
+.strip{display:flex;gap:10px;overflow-x:auto;margin:0 -18px;padding:2px 18px 6px;scroll-snap-type:x proximity;scroll-padding:0 18px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.dcard{flex:none;width:236px;scroll-snap-align:start;display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);padding:8px;text-align:left;color:var(--ink)}
+.dcard:hover{border-color:var(--ink)}
+.dthumb{flex:none;width:56px;height:56px;background:var(--photo);border:1px solid var(--line);position:relative;display:flex;align-items:center;justify-content:center}
+.dthumb b{font:italic 400 26px var(--serif);color:#cbbfae}
+.dthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px;background:var(--photo)}
+.dtxt{min-width:0;display:grid;gap:3px}
+.dname{font:500 13px/1.25 var(--serif);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dprice{font:500 16px var(--serif);display:flex;align-items:baseline;gap:8px}
+.dprice em{font:700 10px var(--sans);font-style:normal;letter-spacing:.1em;text-transform:uppercase;color:var(--sage)}
+
+/* Ortak onay + yeni rozeti */
+.badge.b-new{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.tag.ok2{color:var(--sage);font-weight:700}
+.tag.ask{color:var(--rust);font-weight:700}
+.tag.ok{color:var(--sage);font-weight:700;border:1px solid var(--sage);padding:2px 7px}
+.appr{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.apprwho{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Kaydırarak işlem */
+.gcard{touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.gcard.swiping{transition:none;z-index:5;box-shadow:0 10px 24px rgba(0,0,0,.25)}
+.gcard:not(.swiping){transition:transform .22s ease,border-color .15s}
+.swipehint{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font:700 13px var(--sans);letter-spacing:.2em;text-transform:uppercase;opacity:0;pointer-events:none;color:#fff}
+.swipehint.buy{background:rgba(86,107,79,.9)}
+.swipehint.del{background:rgba(165,87,60,.92)}
+
+/* Geri al bildirimi */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));z-index:60;background:var(--ink);color:var(--bg);display:flex;align-items:center;gap:14px;padding:11px 14px;max-width:calc(100vw - 28px);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.toast[hidden]{display:none}
+.toast button{background:none;border:0;color:var(--bg);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:10.5px;text-decoration:underline;text-underline-offset:3px;padding:0}

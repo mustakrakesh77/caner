@@ -63,3 +63,8 @@ alter table items add column if not exists candidates jsonb default '[]'::jsonb;
 alter table items add column if not exists match_state text;                      -- 'verified' | 'guess' | 'pick' | 'confirmed'
 alter table items add column if not exists match_note text;                       -- eşleşmenin nedeni / uyarı
 alter table items add column if not exists offers_total int;                         -- Akakçe'deki toplam teklif sayısı
+
+-- ===== v4: ortak onay ve "yeni" rozeti =====
+alter table items add column if not exists approvals jsonb default '[]'::jsonb;  -- onaylayanların adları
+alter table items add column if not exists updated_at timestamptz;               -- ürünü en son değiştirme zamanı (kullanıcı)
+alter table items add column if not exists updated_by text;                      -- değiştiren kişi
