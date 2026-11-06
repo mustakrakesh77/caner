@@ -58,7 +58,22 @@ for (const it of items) {
     fail++;
     console.log(`✗ ${it.name}: ${patch.last_error}`);
   }
-  await rest(`items?id=eq.${it.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  const save = () => rest(`items?id=eq.${it.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  let pr = await save();
+  if (!pr.ok) {
+    const msg = await pr.text();
+    if ("image_url" in patch && /image_url/.test(msg)) {
+      // Sütun yoksa diğer bilgileri yine de kaydet, sorunu açıkça söyle.
+      console.log("⚠ Supabase'de image_url sütunu yok. SQL Editor'de şunu çalıştır: alter table items add column if not exists image_url text;");
+      delete patch.image_url;
+      pr = await save();
+      if (!pr.ok) console.log(`✗ Kayıt yazılamadı (${it.name}): ${(await pr.text()).slice(0, 200)}`);
+    } else {
+      console.log(`✗ Kayıt yazılamadı (${it.name}): ${msg.slice(0, 200)}`);
+    }
+  } else if (patch.image_url) {
+    console.log(`  görsel kaydedildi`);
+  }
   await sleep(2000);
 }
 console.log(`Bitti: ${ok} başarılı, ${fail} hatalı`);
