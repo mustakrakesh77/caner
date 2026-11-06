@@ -29,3 +29,13 @@ Linki telefonda aç → tarayıcı menüsü → **Ana ekrana ekle**. Uygulama gi
 - Site adresini bilen herkes listeyi değiştirebilir (şifre yok). Linki başkasıyla paylaşma.
 - GitHub zamanlayıcısı bazen birkaç dakika geç çalışır; "tam 2 saat" garantisi yok.
 - Akakçe sayfa yapısını değiştirirse tarama hata verir; kartta kırmızı uyarı görürsün.
+
+## "Fiyatları yenile" butonu için GitHub anahtarı (her telefonda bir kere)
+Buton, GitHub'daki taramayı başlatır. Bunun için sadece bu repoya, sadece "Actions" izni olan bir anahtar lazım:
+1. GitHub'da sağ üst profil → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Name: `ceyiz-yenile`. Expiration: en uzun süreyi seç.
+3. **Repository access → Only select repositories** → `caner`.
+4. **Permissions → Repository permissions → Actions: Read and write** (başka izin verme).
+5. **Generate token** → çıkan `github_pat_...` ile başlayan anahtarı kopyala (bir daha gösterilmez).
+6. Sitede butona ilk bastığında anahtarı sorar, yapıştır. Anahtar sadece o cihazın tarayıcısında saklanır.
+Anahtar süresi dolarsa buton "geçersiz" uyarısı verir, aynı adımlarla yenisini oluştur. Manitanın telefonunda da aynı anahtarı girebilir ya da kendi GitHub hesabıyla repoya katkıcı olarak eklenip kendi anahtarını alabilir. Anahtarı kimseyle paylaşma, yazıp çizdiğin yerlere yapıştırma.

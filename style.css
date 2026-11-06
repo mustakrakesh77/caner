@@ -44,3 +44,7 @@ details ul{list-style:none;padding:0;margin:6px 0 0}
 a{color:var(--green)}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 .cat{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:16px 2px 6px}
+.refreshbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 2px 6px;font-size:13px;color:var(--mute)}
+.refreshbar #refreshBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600}
+.refreshbar #refreshBtn:disabled{opacity:.6;cursor:default}
+.linkbtn{background:none;border:0;color:var(--mute);text-decoration:underline;font-size:12px;padding:0;margin-left:auto}

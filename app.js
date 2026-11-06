@@ -95,6 +95,8 @@
     $("#cList").textContent = open.length;
     $("#cDeals").textContent = deals.length;
     $("#cBought").textContent = bought.length;
+    const last = items.map((i) => i.last_checked).filter(Boolean).sort().pop();
+    $("#lastScan").textContent = last ? "Son tarama: " + new Date(last).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Henüz taranmadı";
 
     $("#cats").innerHTML = [...new Set(items.map((i) => i.category).filter(Boolean))].map((c) => `<option value="${esc(c)}">`).join("");
 
@@ -156,6 +158,59 @@
     }
     if (r && r.error) alert("Hata: " + r.error.message);
     load();
+  };
+
+  // ---- Manuel fiyat yenileme: GitHub Actions taramasını başlatır ----
+  const getTok = () => { try { return localStorage.getItem("ghtok") || ""; } catch { return ""; } };
+  const setTok = (v) => { try { v ? localStorage.setItem("ghtok", v) : localStorage.removeItem("ghtok"); } catch {} };
+  const lastCheck = () => items.map((i) => i.last_checked).filter(Boolean).sort().pop() || "";
+  function repoInfo() {
+    const m = location.hostname.match(/^(.+)\.github\.io$/);
+    const repo = location.pathname.split("/").filter(Boolean)[0];
+    return m && repo ? { owner: m[1], repo } : null;
+  }
+  const showTokBtn = () => { $("#tokReset").hidden = !getTok(); };
+  showTokBtn();
+  $("#tokReset").onclick = () => { if (confirm("Kayıtlı GitHub anahtarı bu cihazdan silinsin mi?")) { setTok(""); showTokBtn(); } };
+
+  $("#refreshBtn").onclick = async () => {
+    const btn = $("#refreshBtn");
+    const info = repoInfo();
+    if (!info) return alert("Yenileme sadece yayınlanmış github.io adresinde çalışır.");
+    let tok = getTok();
+    if (!tok) {
+      tok = (prompt("İlk kullanımda GitHub izin anahtarı gerekiyor (bu cihazda saklanır, bir kere girilir).\nNasıl alınacağı README.md'de yazıyor.\n\nAnahtarı yapıştır:") || "").trim();
+      if (!tok) return;
+      setTok(tok); showTokBtn();
+    }
+    btn.disabled = true; btn.textContent = "Başlatılıyor…";
+    const before = lastCheck();
+    let r;
+    try {
+      r = await fetch(`https://api.github.com/repos/${info.owner}/${info.repo}/actions/workflows/scan.yml/dispatches`, {
+        method: "POST",
+        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${tok}`, "X-GitHub-Api-Version": "2022-11-28" },
+        body: JSON.stringify({ ref: "main" }),
+      });
+    } catch (e) {
+      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
+      return alert("GitHub'a ulaşılamadı. İnternetini kontrol et.");
+    }
+    if (r.status !== 204) {
+      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
+      if ([401, 403, 404].includes(r.status)) { setTok(""); showTokBtn(); return alert("GitHub anahtarı geçersiz ya da izni yok (kod " + r.status + "). Anahtarı README'deki gibi yeniden oluşturup tekrar dene."); }
+      return alert("Tarama başlatılamadı (kod " + r.status + ").");
+    }
+    btn.textContent = "Taranıyor… (1-3 dk)";
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries++;
+      await load();
+      if (lastCheck() > before || tries >= 16) {
+        clearInterval(iv);
+        btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
+      }
+    }, 15000);
   };
 
   db.channel("items").on("postgres_changes", { event: "*", schema: "public", table: "items" }, load).subscribe();
