@@ -11,7 +11,9 @@
   let budget = null;
   let tab = "list";
   let openId = null;
-  const F = { q: "", prio: "all", who: "all", sort: "cat" };
+  const F = { q: "", prio: "all", who: "all", cat: "all", sort: "cat" };
+  let selMode = false;
+  const sel = new Set();
 
   // ---------- yardımcılar ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,6 +35,30 @@
   };
   const hitTarget = (i) => unit(i) != null && num(i.target_price) != null && unit(i) <= num(i.target_price);
   const isDeal = (i) => dropPct(i) > 0 || hitTarget(i) || isLowest(i);
+
+  // ---------- kategoriler ----------
+  const CATS = (window.Categories && Categories.LIST) || [];
+  const catLabel = (c) => (!c || c === "Genel" ? "Ayrılacak" : c);
+  const catOf = (i) => i.category || "Genel";
+  const catOrder = (c) => (c === "Genel" ? 999 : CATS.includes(c) ? CATS.indexOf(c) : 500);
+  const allCats = () => {
+    const extra = [...new Set(items.map(catOf))].filter((c) => c !== "Genel" && !CATS.includes(c)).sort((a, b) => a.localeCompare(b, "tr"));
+    return [...CATS, ...extra];
+  };
+  const catOptions = (selected, withAuto) =>
+    (withAuto ? `<option value="Genel" ${selected === "Genel" ? "selected" : ""}>Otomatik (ben ayırırım)</option>` : "") +
+    allCats().map((c) => `<option value="${esc(c)}" ${c === selected ? "selected" : ""}>${esc(c)}</option>`).join("");
+  function fillCategorySelects() {
+    const base = items.filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
+    const counts = {};
+    base.forEach((i) => { counts[catOf(i)] = (counts[catOf(i)] || 0) + 1; });
+    const keys = Object.keys(counts).sort((a, b) => catOrder(a) - catOrder(b) || a.localeCompare(b, "tr"));
+    if (F.cat !== "all" && !counts[F.cat]) F.cat = "all";
+    $("#catSel").innerHTML = `<option value="all">Tüm kategoriler</option>` + keys.map((c) => `<option value="${esc(c)}" ${F.cat === c ? "selected" : ""}>${esc(catLabel(c))} (${counts[c]})</option>`).join("");
+    const fc = $("#fCat"), cur = fc.value || "Genel";
+    fc.innerHTML = catOptions(allCats().includes(cur) ? cur : "Genel", true);
+    $("#selCat").innerHTML = `<option value="">Kategori değiştir…</option>` + allCats().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  }
 
   const getWho = () => { try { return localStorage.getItem("who") || ""; } catch { return ""; } };
   const setWho = (v) => { try { localStorage.setItem("who", v); } catch {} };
@@ -95,7 +121,7 @@
     const entries = Object.entries(cats).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
     if (entries.length) {
       const max = entries[0][1];
-      html += `<details><summary>Kategorilere göre</summary>${entries.map(([c, v]) => `<div class="cat-row"><span>${esc(c)}</span><div class="t"><i style="width:${Math.max(4, (v / max) * 100)}%"></i></div><b>${tl(v)}</b></div>`).join("")}</details>`;
+      html += `<details><summary>Kategorilere göre</summary>${entries.map(([c, v]) => `<div class="cat-row"><span>${esc(catLabel(c))}</span><div class="t"><i style="width:${Math.max(4, (v / max) * 100)}%"></i></div><b>${tl(v)}</b></div>`).join("")}</details>`;
     }
     $("#budget").innerHTML = html;
   }
@@ -117,7 +143,7 @@
     let h = chip("prio", "all", "Hepsi") + chip("prio", "sart", "Şart") + chip("prio", "iyi", "Olsa iyi");
     if (people.length) h += `<span class="sep"></span>` + chip("who", "all", "Herkes") + people.map((p) => chip("who", p, esc(p))).join("");
     $("#chips").innerHTML = h;
-    $("#cats").innerHTML = [...new Set(items.map((i) => i.category).filter(Boolean))].map((c) => `<option value="${esc(c)}">`).join("");
+    fillCategorySelects();
     const names = new Set([...people, ...items.map((i) => (i.added_by || "").trim()).filter(Boolean), getWho()].filter(Boolean));
     $("#people").innerHTML = [...names].map((p) => `<option value="${esc(p)}">`).join("");
   }
@@ -129,6 +155,7 @@
   };
   $("#q").oninput = (e) => { F.q = e.target.value; render(); };
   $("#sort").onchange = (e) => { F.sort = e.target.value; render(); };
+  $("#catSel").onchange = (e) => { F.cat = e.target.value; render(); };
 
   // ---------- galeri ----------
   function visible() {
@@ -138,6 +165,7 @@
     if (q) list = list.filter((i) => [i.name, i.category, i.note, i.assignee].join(" ").toLocaleLowerCase("tr").includes(q));
     if (F.prio !== "all") list = list.filter((i) => prioOf(i) === F.prio);
     if (F.who !== "all") list = list.filter((i) => (i.assignee || "").trim() === F.who);
+    if (F.cat !== "all") list = list.filter((i) => catOf(i) === F.cat);
     const byPrice = (a, b) => (unit(a) ?? Infinity) - (unit(b) ?? Infinity);
     if (F.sort === "price-asc") list = [...list].sort(byPrice);
     else if (F.sort === "price-desc") list = [...list].sort((a, b) => (unit(b) ?? -1) - (unit(a) ?? -1));
@@ -165,8 +193,8 @@
       i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
       i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
     ].join("");
-    return `<article class="gcard ${i.purchased ? "done" : ""}" data-id="${i.id}" tabindex="0">
-      <div class="imgwrap"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}
+    return `<article class="gcard ${i.purchased ? "done" : ""} ${selMode ? "selectable" : ""} ${sel.has(i.id) ? "picked" : ""}" data-id="${i.id}" tabindex="0">
+      <div class="imgwrap"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}<span class="pick" aria-hidden="true">✓</span>
         <div class="ov">${overlayBadges(i)}</div>
         <button type="button" class="quick" data-act="${i.purchased ? "undo" : "buy"}" data-id="${i.id}" aria-label="${i.purchased ? "Geri al" : "Aldık olarak işaretle"}">${i.purchased ? "↩" : "✓"}</button>
       </div>
@@ -198,24 +226,39 @@
     $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""}` : "";
 
     if (!list.length) {
-      const filtered = F.q || F.prio !== "all" || F.who !== "all";
+      const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all";
       $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
     } else if (F.sort === "cat") {
       const groups = {};
-      list.forEach((i) => (groups[i.category || "Genel"] ||= []).push(i));
-      $("#items").innerHTML = Object.keys(groups).sort((a, b) => a.localeCompare(b, "tr")).map((c) => `<div class="cat">${esc(c)}</div><div class="grid">${groups[c].map(gcard).join("")}</div>`).join("");
+      list.forEach((i) => (groups[catOf(i)] ||= []).push(i));
+      $("#items").innerHTML = Object.keys(groups).sort((a, b) => catOrder(a) - catOrder(b) || a.localeCompare(b, "tr")).map((c) => `<div class="cat">${esc(catLabel(c))}</div><div class="grid">${groups[c].map(gcard).join("")}</div>`).join("");
     } else {
       $("#items").innerHTML = `<div class="grid">${list.map(gcard).join("")}</div>`;
+    }
+    if (selMode) {
+      const vis = new Set(list.map((i) => i.id));
+      [...sel].forEach((id) => { if (!vis.has(id)) sel.delete(id); });
+      renderSelBar();
     }
   }
 
   document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => {
     tab = b.dataset.tab;
+    sel.clear();
     document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
     render();
   }));
 
   $("#items").onclick = async (e) => {
+    const card0 = e.target.closest(".gcard");
+    if (selMode) {
+      if (!card0) return;
+      const id = card0.dataset.id;
+      sel.has(id) ? sel.delete(id) : sel.add(id);
+      card0.classList.toggle("picked", sel.has(id));
+      renderSelBar();
+      return;
+    }
     const q = e.target.closest(".quick");
     if (q) {
       e.stopPropagation();
@@ -226,7 +269,50 @@
     if (card) openDetail(card.dataset.id);
   };
   $("#items").onkeydown = (e) => {
-    if (e.key === "Enter" && e.target.classList.contains("gcard")) openDetail(e.target.dataset.id);
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("gcard")) { e.preventDefault(); e.target.click(); }
+  };
+
+  // ---------- toplu seçim: seçip kaldır / aldık / kategori değiştir ----------
+  function setSelMode(on) {
+    selMode = on;
+    sel.clear();
+    document.body.classList.toggle("selmode", on);
+    $("#selbar").hidden = !on;
+    $("#selBtn").textContent = on ? "Vazgeç" : "Seç";
+    render();
+  }
+  function renderSelBar() {
+    $("#selCount").textContent = `${sel.size} seçili`;
+    const none = sel.size === 0;
+    ["#selBuy", "#selDel", "#selCat"].forEach((s) => ($(s).disabled = none));
+    $("#selBuy").textContent = tab === "bought" ? "Geri al" : "Aldık";
+  }
+  async function bulk(patch) {
+    const { error } = await db.from("items").update(patch).in("id", [...sel]);
+    if (error) alert("Kaydedilemedi: " + error.message);
+    return !error;
+  }
+  $("#selBtn").onclick = () => setSelMode(!selMode);
+  $("#selX").onclick = () => setSelMode(false);
+  $("#selAll").onclick = () => { visible().forEach((i) => sel.add(i.id)); render(); };
+  $("#selBuy").onclick = async () => {
+    const ok = await bulk(tab === "bought" ? { purchased: false, purchased_at: null } : { purchased: true, purchased_at: new Date().toISOString() });
+    if (ok) { await load(); setSelMode(false); }
+  };
+  $("#selCat").onchange = async (e) => {
+    const v = e.target.value;
+    if (!v) return;
+    if (await bulk({ category: v })) { await load(); setSelMode(false); } else e.target.value = "";
+  };
+  $("#selDel").onclick = async () => {
+    const ids = [...sel];
+    if (!ids.length) return;
+    const names = ids.slice(0, 3).map((id) => (items.find((i) => i.id === id) || {}).name).filter(Boolean).map((n) => "• " + n.slice(0, 50)).join("\n");
+    if (!confirm(`${ids.length} ürün listeden silinsin mi? Bu geri alınamaz.\n\n${names}${ids.length > 3 ? "\n…" : ""}`)) return;
+    const { error } = await db.from("items").delete().in("id", ids);
+    if (error) return alert("Silinemedi: " + error.message);
+    await load();
+    setSelMode(false);
   };
 
   // ---------- ürün ekleme ----------
@@ -239,12 +325,15 @@
     e.preventDefault();
     const url = $("#fUrl").value.trim();
     const isAk = /akakce\.com/i.test(url);
+    const name = $("#fName").value.trim() || nameFromUrl(url) || "İsimsiz ürün";
+    let cat = $("#fCat").value || "Genel";
+    if (cat === "Genel") cat = (window.Categories && Categories.guess(name, url)) || "Genel"; // Otomatik: hemen ayır, ilk taramada Akakçe'ye göre kesinleşir
     const row = {
-      name: $("#fName").value.trim() || nameFromUrl(url) || "İsimsiz ürün",
+      name,
       source_url: url,
       akakce_url: isAk ? url : null,
       match_confirmed: isAk,
-      category: $("#fCat").value.trim() || "Genel",
+      category: cat,
       quantity: Math.max(1, Number($("#fQty").value) || 1),
       priority: $("#fPrio").value,
       assignee: $("#fWho").value.trim() || null,
@@ -289,7 +378,7 @@
       </div>
       <div class="row2">
         <label>Kim alacak?<input id="dWho" list="people" value="${esc(i.assignee || "")}"></label>
-        <label>Kategori<input id="dCat" list="cats" value="${esc(i.category || "")}"></label>
+        <label>Kategori<select id="dCat">${catOptions(catOf(i), true)}</select></label>
       </div>
       <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
       <label>Not<textarea id="dNote" rows="2">${esc(i.note || "")}</textarea></label>
@@ -362,7 +451,7 @@
         quantity: Math.max(1, Number($("#dQty").value) || 1),
         priority: $("#dPrio").value,
         assignee: $("#dWho").value.trim() || null,
-        category: $("#dCat").value.trim() || "Genel",
+        category: $("#dCat").value || "Genel",
         target_price: $("#dTarget").value ? Number($("#dTarget").value) : null,
         note: $("#dNote").value.trim() || null,
       });
@@ -426,16 +515,31 @@
       if ([401, 403, 404].includes(r.status)) { setTok(""); showTokBtn(); return alert("GitHub anahtarı geçersiz ya da izni yok (kod " + r.status + "). Anahtarı README'deki gibi yeniden oluşturup tekrar dene."); }
       return alert("Tarama başlatılamadı (kod " + r.status + ").");
     }
-    btn.textContent = "Taranıyor… (1-3 dk)";
-    let tries = 0;
-    const iv = setInterval(async () => {
-      tries++;
+    // Bitişi tahminle değil GitHub'dan öğren: 3 saniyede bir çalışmanın gerçek durumuna bakar.
+    const t0 = Date.now();
+    const api = `https://api.github.com/repos/${info.owner}/${info.repo}/actions/workflows/scan.yml/runs?event=workflow_dispatch&per_page=5`;
+    const hdr = { Accept: "application/vnd.github+json", Authorization: `Bearer ${tok}`, "X-GitHub-Api-Version": "2022-11-28" };
+    const finish = async (msg) => {
+      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
       await load();
-      if (lastCheck() > before || tries >= 16) {
-        clearInterval(iv);
-        btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
-      }
-    }, 15000);
+      if (msg) alert(msg);
+    };
+    const tick = async () => {
+      const sec = Math.round((Date.now() - t0) / 1000);
+      try {
+        const rr = await fetch(api, { headers: hdr });
+        if (rr.ok) {
+          const runs = (await rr.json()).workflow_runs || [];
+          const run = runs.find((x) => new Date(x.created_at).getTime() >= t0 - 20000);
+          if (run && run.status === "completed") return finish(run.conclusion === "success" ? "" : "Tarama hata verdi. GitHub'da Actions sekmesindeki kaydı kontrol et.");
+          btn.textContent = run ? `Taranıyor… ${sec} sn` : `Başlatılıyor… ${sec} sn`;
+        }
+      } catch (e) { /* geçici ağ hatası: tekrar dene */ }
+      if (sec > 300) return finish("Tarama beklenenden uzun sürdü. Birkaç dakika sonra sayfayı yenile.");
+      if (sec % 9 < 3) load(); // ürünler güncellendikçe ekrana gelsin
+      setTimeout(tick, 3000);
+    };
+    tick();
   };
 
   db.channel("items").on("postgres_changes", { event: "*", schema: "public", table: "items" }, () => { if (!openId) load(); }).subscribe();

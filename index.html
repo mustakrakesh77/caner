@@ -31,6 +31,7 @@
 
   <div class="toolbar">
     <input id="q" type="search" placeholder="Ara…" aria-label="Ara">
+    <select id="catSel" aria-label="Kategori"><option value="all">Tüm kategoriler</option></select>
     <select id="sort" aria-label="Sırala">
       <option value="cat">Kategoriye göre</option>
       <option value="price-asc">Fiyat: düşükten yükseğe</option>
@@ -48,6 +49,7 @@
 
   <div class="refreshbar">
     <button id="refreshBtn" type="button">↻ Fiyatları yenile</button>
+    <button id="selBtn" type="button">Seç</button>
     <span id="lastScan"></span>
     <button id="tokReset" type="button" class="linkbtn" hidden>anahtarı sıfırla</button>
   </div>
@@ -65,7 +67,7 @@
     <label>Ürün linki<input id="fUrl" type="url" placeholder="Trendyol, Hepsiburada, Akakçe… linkini yapıştır" required></label>
     <label>Ürün adı <small>(boşsa linkten çıkarırım)</small><input id="fName" type="text"></label>
     <div class="row2">
-      <label>Kategori<input id="fCat" list="cats" type="text" placeholder="Salon, Mutfak…"></label>
+      <label>Kategori<select id="fCat"></select></label>
       <label>Adet<input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
     </div>
     <div class="row2">
@@ -82,11 +84,20 @@
 
 <dialog id="detailDlg"><div id="detail" class="sheet"></div></dialog>
 
-<datalist id="cats"></datalist>
 <datalist id="people"></datalist>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<div id="selbar" class="selbar" hidden>
+  <span id="selCount">0 seçili</span>
+  <button type="button" id="selAll" class="sb">Tümünü seç</button>
+  <button type="button" id="selBuy" class="sb strong">Aldık</button>
+  <select id="selCat" aria-label="Kategori değiştir"></select>
+  <button type="button" id="selDel" class="sb danger">Sil</button>
+  <button type="button" id="selX" class="sb">Vazgeç</button>
+</div>
+
 <script src="config.js"></script>
+<script src="categories.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

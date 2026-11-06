@@ -2,7 +2,7 @@ name: Fiyat taraması
 
 on:
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "17 */2 * * *" # yedek zamanlayıcı; asıl tetikleyici Supabase (supabase/scheduler.sql)
   workflow_dispatch: {}
 
 jobs:
@@ -11,9 +11,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      # Node, ubuntu-latest üzerinde hazır geliyor; ayrıca kurmak gereksiz bekleme.
       - run: node scraper/scan.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
