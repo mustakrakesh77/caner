@@ -37,6 +37,8 @@ for (const it of items) {
 
     if (it.current_price != null && p.price !== Number(it.current_price)) patch.prev_price = it.current_price;
     patch.current_price = p.price;
+    patch.lowest_price = it.lowest_price != null ? Math.min(Number(it.lowest_price), p.price) : p.price;
+    patch.highest_price = it.highest_price != null ? Math.max(Number(it.highest_price), p.price) : p.price;
     patch.best_store = p.store;
     patch.best_url = p.url;
     patch.offers = p.offers;
@@ -59,13 +61,14 @@ for (const it of items) {
     console.log(`✗ ${it.name}: ${patch.last_error}`);
   }
   const save = () => rest(`items?id=eq.${it.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  const OPTIONAL = ["image_url", "lowest_price", "highest_price"];
   let pr = await save();
   if (!pr.ok) {
     const msg = await pr.text();
-    if ("image_url" in patch && /image_url/.test(msg)) {
-      // Sütun yoksa diğer bilgileri yine de kaydet, sorunu açıkça söyle.
-      console.log("⚠ Supabase'de image_url sütunu yok. SQL Editor'de şunu çalıştır: alter table items add column if not exists image_url text;");
-      delete patch.image_url;
+    if (OPTIONAL.some((k) => k in patch) && /column|schema cache/i.test(msg)) {
+      // Yeni sütunlar yoksa temel bilgileri yine de kaydet, sorunu açıkça söyle.
+      console.log("⚠ Veritabanında yeni sütunlar eksik. supabase/schema.sql dosyasındaki v2 bölümünü SQL Editor'de çalıştır.");
+      OPTIONAL.forEach((k) => delete patch[k]);
       pr = await save();
       if (!pr.ok) console.log(`✗ Kayıt yazılamadı (${it.name}): ${(await pr.text()).slice(0, 200)}`);
     } else {

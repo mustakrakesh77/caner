@@ -4,15 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Çeyiz Listesi</title>
-<meta name="theme-color" content="#1f6f5c">
+<meta name="theme-color" content="#0f766e">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>🏠 Çeyiz Listesi</h1>
-  <div class="who">Ekleyen: <button id="whoBtn" type="button">—</button></div>
+<header class="hero">
+  <div class="hero-top">
+    <h1>🏠 Çeyiz Listesi</h1>
+    <div class="who">Ekleyen: <button id="whoBtn" type="button">—</button></div>
+  </div>
+  <section id="budget" class="bud" aria-label="Bütçe"></section>
 </header>
 
 <main>
@@ -20,16 +23,16 @@
     <b>Kurulum eksik.</b> <code>config.js</code> dosyasına Supabase adresini ve anahtarını yazman lazım. README.md'deki adımlara bak.
   </div>
 
-  <form id="addForm" class="card add">
-    <input id="fUrl" type="url" placeholder="Ürün linkini yapıştır" required>
-    <input id="fName" type="text" placeholder="Ürün adı (boşsa linkten çıkarırım)">
-    <div class="row">
-      <input id="fCat" list="cats" type="text" placeholder="Kategori">
-      <datalist id="cats"></datalist>
-      <input id="fTarget" type="number" min="0" step="1" inputmode="numeric" placeholder="Hedef fiyat ₺">
-    </div>
-    <button type="submit">Listeye ekle</button>
-  </form>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Ara…" aria-label="Ara">
+    <select id="sort" aria-label="Sırala">
+      <option value="cat">Kategoriye göre</option>
+      <option value="price-asc">Fiyat: düşükten yükseğe</option>
+      <option value="price-desc">Fiyat: yüksekten düşüğe</option>
+      <option value="drop">En çok indirim</option>
+    </select>
+  </div>
+  <div id="chips" class="chips"></div>
 
   <nav class="tabs">
     <button data-tab="list" class="on">Liste <span id="cList"></span></button>
@@ -46,6 +49,34 @@
   <div id="summary" class="summary"></div>
   <div id="items"></div>
 </main>
+
+<button id="fab" type="button" aria-label="Ürün ekle">+</button>
+
+<dialog id="addDlg">
+  <form id="addForm" class="sheet">
+    <div class="sheet-head"><h2>Ürün ekle</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
+    <label>Ürün linki<input id="fUrl" type="url" placeholder="Trendyol, Hepsiburada, Akakçe… linkini yapıştır" required></label>
+    <label>Ürün adı <small>(boşsa linkten çıkarırım)</small><input id="fName" type="text"></label>
+    <div class="row2">
+      <label>Kategori<input id="fCat" list="cats" type="text" placeholder="Salon, Mutfak…"></label>
+      <label>Adet<input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
+    </div>
+    <div class="row2">
+      <label>Öncelik
+        <select id="fPrio"><option value="sart">Şart</option><option value="iyi">Olsa iyi olur</option></select>
+      </label>
+      <label>Kim alacak?<input id="fWho" list="people" type="text" placeholder="isim"></label>
+    </div>
+    <label>Hedef fiyat ₺ <small>(altına inince haber vereyim)</small><input id="fTarget" type="number" min="0" step="1" inputmode="numeric"></label>
+    <label>Not<textarea id="fNote" rows="2" placeholder="renk, ölçü, mağaza tercihi…"></textarea></label>
+    <button type="submit" class="primary">Listeye ekle</button>
+  </form>
+</dialog>
+
+<dialog id="detailDlg"><div id="detail" class="sheet"></div></dialog>
+
+<datalist id="cats"></datalist>
+<datalist id="people"></datalist>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>

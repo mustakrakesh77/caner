@@ -41,3 +41,19 @@ create policy "history_read" on price_history for select to anon using (true);
 
 -- Canlı güncelleme için
 alter publication supabase_realtime add table items;
+
+-- ===== v2: adet, öncelik, kişi, not, en düşük/yüksek fiyat, bütçe =====
+alter table items add column if not exists quantity int default 1;
+alter table items add column if not exists priority text default 'sart';   -- 'sart' | 'iyi'
+alter table items add column if not exists assignee text;
+alter table items add column if not exists note text;
+alter table items add column if not exists lowest_price numeric;
+alter table items add column if not exists highest_price numeric;
+
+create table if not exists settings (
+  key text primary key,
+  value jsonb
+);
+alter table settings enable row level security;
+drop policy if exists "settings_all" on settings;
+create policy "settings_all" on settings for all to anon using (true) with check (true);
