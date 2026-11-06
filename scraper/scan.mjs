@@ -1,7 +1,8 @@
 // Her çalıştığında alınmamış ürünlerin fiyatını Akakçe'den günceller (3 ürün aynı anda).
 // Yeni ürünlerde önce Akakçe'de arar, model kodu/ad benzerliğiyle eşleştirir; emin değilse karar kullanıcıya kalır.
 import { get, nameFromUrl, parseProduct } from "./akakce.mjs";
-import { parseSearch, chooseMatch } from "./match.mjs";
+import { parseSearch, chooseMatch, wordScore, coverage } from "./match.mjs";
+import { isShortLink, resolveShortLink } from "./links.mjs";
 import Cat from "../categories.js";
 
 const URL_ = process.env.SUPABASE_URL;
@@ -19,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jitter = (ms) => ms + Math.random() * (ms / 2);
 const unassigned = (it) => !it.category || it.category === "Genel";
 const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
-const OPTIONAL = ["image_url", "lowest_price", "highest_price", "candidates", "match_state", "match_note", "offers_total"];
+const OPTIONAL = ["image_url", "lowest_price", "highest_price", "candidates", "match_state", "match_note", "offers_total", "source_title", "match_warn"];
 
 const res = await rest("items?purchased=eq.false&select=*");
 if (!res.ok) throw new Error("Liste okunamadı: " + (await res.text()));
@@ -48,7 +49,8 @@ async function scanOne(it) {
   };
 
   // Eşleşme seçimi bekleyen ve adayları hazır ürünü boşuna taramayalım.
-  if (!it.akakce_url && it.match_state === "pick" && Array.isArray(it.candidates) && it.candidates.length) {
+  const needsResolve = isShortLink(it.source_url || "") && !it.source_title;
+  if (!it.akakce_url && it.match_state === "pick" && Array.isArray(it.candidates) && it.candidates.length && !needsResolve) {
     console.log(`? ${it.name}: eşleşme seçimi bekleniyor`);
     return;
   }
@@ -56,22 +58,38 @@ async function scanOne(it) {
   try {
     let pageUrl = it.akakce_url;
     if (!pageUrl) {
-      const fromLink = nameFromUrl(it.source_url || "");
-      const query = it.name || fromLink;
+      // Kısa paylaşım linkindeki (ty.gl/...) gerçek ürün adını çöz; varsa kullanıcının yazdığı genel addan daha güvenilirdir.
+      let ident = it.source_title || "";
+      if (!ident && isShortLink(it.source_url || "")) {
+        const r = await resolveShortLink(it.source_url);
+        if (r && r.name) { ident = r.name; patch.source_title = r.name; }
+      }
+      const fromLink = ident || nameFromUrl(it.source_url || "");
+      const placeholder = !it.name || it.name === "İsimsiz ürün";
+      const query = ident || (placeholder ? fromLink : it.name) || fromLink;
       if (!query) throw new Error("Aranacak ürün adı yok");
-      const html = await get(BASE + "/arama/?q=" + encodeURIComponent(query));
-      const found = parseSearch(html, BASE).slice(0, 10);
+      // Uzun ürün başlıkları bazen sonuç vermez: tam adla, olmazsa ilk 7 ve 4 kelimeyle dene.
+      const words = query.split(/\s+/);
+      let found = [];
+      for (const q of [...new Set([query, words.slice(0, 7).join(" "), words.slice(0, 4).join(" ")])]) {
+        found = parseSearch(await get(BASE + "/arama/?q=" + encodeURIComponent(q)), BASE).slice(0, 10);
+        if (found.length) break;
+        await sleep(jitter(300));
+      }
       if (!found.length) throw new Error("Akakçe'de eşleşme bulunamadı");
 
-      const d = chooseMatch([it.name, fromLink].filter(Boolean).join(" "), found);
+      // Link çözülebildiyse eşleştirmeyi onun adına göre yap; çözülemediyse kullanıcının adı + linkten çıkan ad.
+      const d = chooseMatch(ident || [it.name, fromLink].filter(Boolean).join(" "), found);
       const strip = ({ url, title, image, price, offers }) => ({ url, title, image, price, offers });
       const ordered = d.candidate ? [d.candidate, ...d.ranked.filter((c) => c.url !== d.candidate.url)] : d.ranked;
       patch.candidates = ordered.slice(0, 6).map(strip);
 
-      if (d.action === "pick" || it.match_state === "pick") {
+      // Kullanıcı "başka aday" istediyse (state=pick) otomatik seçme; ama eski hatalı bekleyenleri (needsResolve) yeniden değerlendir.
+      const userAsked = it.match_state === "pick" && !needsResolve;
+      if (d.action === "pick" || userAsked) {
         // Emin değiliz (ya da kullanıcı başka aday istedi): fiyat çekmiyoruz, seçim bekleniyor.
         patch.match_state = "pick";
-        patch.match_note = it.match_state === "pick" ? "Adaylar hazır. Doğru ürünü sen seç." : d.note;
+        patch.match_note = userAsked ? "Adaylar hazır. Doğru ürünü sen seç." : d.note;
         ask++;
         console.log(`? ${it.name}: ${patch.match_note}`);
         await persist();
@@ -95,6 +113,18 @@ async function scanOne(it) {
     patch.best_url = p.url;
     patch.offers = p.offers;
     patch.offers_total = p.total;
+    // Kısa linki (daha önce çözülmediyse) bir kereliğine çöz ve seçili ürünün linkteki ürüne benzeyip benzemediğini kontrol et.
+    let ident2 = it.source_title || patch.source_title || "";
+    if (!ident2 && isShortLink(it.source_url || "")) {
+      const r = await resolveShortLink(it.source_url);
+      if (r && r.name) { ident2 = r.name; patch.source_title = r.name; }
+    }
+    // match_warn === "" : kullanıcı "Doğru" dedi, bir daha uyarma.
+    if (ident2 && p.title && it.match_warn !== "") {
+      const probe = { title: p.title, url: pageUrl };
+      patch.match_warn = wordScore(ident2, probe) < 0.5 || coverage(ident2, probe) < 0.5
+        ? `Linkindeki ürün: "${ident2}". Seçili ürün: "${p.title}". Farklı ürün olabilir.` : null;
+    }
     if (p.image) patch.image_url = p.image;
     // Ad linkten otomatik çıkarılmışsa (kullanıcı kendi yazmadıysa) Akakçe'deki gerçek adla değiştir.
     if (p.title && (norm(it.name) === norm(nameFromUrl(it.source_url || "")) || it.name === "İsimsiz ürün")) {

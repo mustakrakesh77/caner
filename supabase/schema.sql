@@ -71,3 +71,7 @@ alter table items add column if not exists updated_by text;                     
 
 -- ===== v5: wishlist (kişisel listeler) =====
 alter table items add column if not exists owner text;   -- boş = ortak ihtiyaçlar; 'Sıla' / 'Caner' = o kişinin wishlist'i
+
+-- ===== v6: kısa link çözümü ve eşleşme uyarısı =====
+alter table items add column if not exists source_title text;  -- kısa linkten (ty.gl/...) çözülen gerçek ürün adı
+alter table items add column if not exists match_warn text;    -- seçili ürün linktekiyle uyuşmuyor olabilir uyarısı ('' = kullanıcı onayladı)

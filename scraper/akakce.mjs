@@ -12,7 +12,11 @@ export function nameFromUrl(url) {
     let slug = parts.filter((p) => p.includes("-")).sort((a, b) => b.length - a.length)[0] || parts.pop() || "";
     slug = slug.replace(/\.html?$/i, "").replace(/-p-\d+$/i, "").replace(/-(pm|p)-[a-z0-9]+$/i, "");
     slug = slug.replace(/,\d+$/, "").replace(/^en-ucuz-/, "").replace(/-fiyati$/, "");
-    return decodeURIComponent(slug).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+    const name = decodeURIComponent(slug).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+    // "ty.gl/23xewhicl1alc" gibi kısa linklerdeki rastgele kod bir ürün adı değildir.
+    if (/^(?:www\.)?(?:ty\.gl|app\.hb\.biz|hb\.biz|amzn\.to|amzn\.eu|a\.co|n11\.app\.link)$/i.test(u.hostname)) return "";
+    if (!/\s/.test(name) && name.length >= 8 && /\d/.test(name)) return "";
+    return name;
   } catch {
     return "";
   }

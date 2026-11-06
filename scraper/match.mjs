@@ -46,7 +46,8 @@ export function codesOf(text) {
   const toks = norm(text).split(" ").filter(Boolean);
   const codes = new Set();
   toks.forEach((t, k) => {
-    if (/[a-z]/.test(t) && /\d/.test(t) && t.length >= 4) {
+    // "3200w", "256gb", "6x" gibi rakam+birim özellikleri model kodu değildir.
+    if (/[a-z]/.test(t) && /\d/.test(t) && t.length >= 4 && !/^\d+[a-z]{1,3}$/.test(t)) {
       codes.add(t);
       const nx = toks[k + 1];
       if (nx && /^[a-z0-9]{1,3}$/.test(nx) && /\d/.test(nx)) codes.add(t + nx);
@@ -68,12 +69,17 @@ function codeStrength(userCodes, candCodes) {
 }
 
 const STOP = new Set(["ve", "ile", "icin", "adet", "li", "lu", "lik", "tl", "en", "ucuz", "fiyati", "html", "www", "com", "https", "http"]);
+// Ürün türünü anlatan genel kelimeler: bunlar tutsa bile "aynı ürün" demek için yetmez.
+const GENERIC = new Set(["set", "seti", "takim", "takimi", "parca", "kisilik", "tencere", "tava", "makine", "makinesi", "serisi", "seri", "buharli", "yemek", "kahvalti", "cay", "kahve", "utu", "kg", "lt", "litre", "cm", "mm", "gb", "adet", "ve", "ile"]);
 const ACCESSORY = /aksesuar|yedek-parca|kilif|kapak|koruyucu|sarj|kablo|filtre|firca|torba|bez|ayak|kulp/;
 
 function tokens(text) {
   return norm(text).split(" ").filter((t) => t.length >= 2 && !STOP.has(t));
 }
 const weight = (t) => (/\d/.test(t) ? 2 : 1);
+// "set" ~ "seti", "takim" ~ "takimi": biri diğerinin başlangıcıysa (en az 3 harf, en çok 3 harf fark) aynı kelime sayılır.
+const same = (a, b) => a === b || (Math.min(a.length, b.length) >= 3 && Math.abs(a.length - b.length) <= 3 && (a.startsWith(b) || b.startsWith(a)));
+const has = (set, t) => { for (const c of set) if (same(t, c)) return true; return false; };
 
 // Dice benzeri skor (0-1): ortak kelimeler / iki metnin toplam kelimesi. Rakamlı kelimeler (model, kapasite) çift ağırlıklı.
 export function wordScore(userText, cand) {
@@ -82,10 +88,19 @@ export function wordScore(userText, cand) {
   const C = new Set(tokens(cand.title));
   const uw = U.reduce((s, t) => s + weight(t), 0);
   const cw = [...C].reduce((s, t) => s + weight(t), 0);
-  const common = U.filter((t) => C.has(t)).reduce((s, t) => s + weight(t), 0);
+  const common = U.filter((t) => has(C, t)).reduce((s, t) => s + weight(t), 0);
   let score = uw + cw ? (2 * common) / (uw + cw) : 0;
   if (ACCESSORY.test(slug) && !ACCESSORY.test(norm(userText).replace(/ /g, "-"))) score *= 0.3;
   return score;
+}
+
+// Kullanıcının ayırt edici kelimelerinin (marka, model adı, ölçü...) kaçı adayda var? (0-1)
+// "Bon Appetit" ile "Petit Bonheur" gibi benzer ama farklı ürünleri ayırır.
+export function coverage(userText, cand) {
+  const D = [...new Set(tokens(userText))].filter((t) => !GENERIC.has(t));
+  if (!D.length) return 1;
+  const C = new Set(tokens(cand.title));
+  return D.filter((t) => has(C, t)).length / D.length;
 }
 
 /**
@@ -97,7 +112,7 @@ export function chooseMatch(userText, cands) {
   const U = codesOf(userText);
   const scored = cands.map((c) => {
     const cc = codesOf(c.title + " " + (c.url.split("/").filter(Boolean)[2] || "").replace(/-/g, " "));
-    return { ...c, score: wordScore(userText, c), ...(U.size ? codeStrength(U, cc) : { strength: 0, code: null }) };
+    return { ...c, score: wordScore(userText, c), cover: coverage(userText, c), ...(U.size ? codeStrength(U, cc) : { strength: 0, code: null }) };
   });
   const ranked = [...scored].sort((a, b) => b.score - a.score);
 
@@ -114,7 +129,7 @@ export function chooseMatch(userText, cands) {
 
   const [a, b] = ranked;
   // Birebir aynı başlık (>=0.95) doğrudan kabul; diğerlerinde en az 0.6 ve ikinciden belirgin önde olmalı.
-  if (a && (a.score >= 0.95 || (a.score >= 0.6 && (!b || a.score - b.score >= 0.03)))) {
+  if (a && (a.score >= 0.95 || (a.score >= 0.6 && a.cover >= 0.6 && (!b || a.score - b.score >= 0.03)))) {
     return { action: "use", candidate: a, ranked, verified: false, note: "Ürün adında model kodu yoktu, ad benzerliğiyle seçildi. Kontrol et." };
   }
   return { action: "pick", ranked, note: "Net bir eşleşme bulamadım. Doğru ürünü sen seç." };

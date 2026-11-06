@@ -145,10 +145,15 @@
 
   function nameFromUrl(url) {
     try {
-      const parts = new URL(url).pathname.split("/").filter(Boolean);
-      let s = parts.filter((p) => p.includes("-")).sort((a, b) => b.length - a.length)[0] || parts.pop() || "";
-      s = s.replace(/\.html?$/i, "").replace(/-p-\d+$/i, "").replace(/-(pm|p)-[a-z0-9]+$/i, "").replace(/,\d+$/, "").replace(/^en-ucuz-/, "").replace(/-fiyati$/, "");
-      return decodeURIComponent(s).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+      const u = new URL(url);
+      const parts = u.pathname.split("/").filter(Boolean);
+      let sg = parts.filter((p) => p.includes("-")).sort((a, b) => b.length - a.length)[0] || parts.pop() || "";
+      sg = sg.replace(/\.html?$/i, "").replace(/-p-\d+$/i, "").replace(/-(pm|p)-[a-z0-9]+$/i, "").replace(/,\d+$/, "").replace(/^en-ucuz-/, "").replace(/-fiyati$/, "");
+      const name = decodeURIComponent(sg).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+      // "ty.gl/23xewhicl1alc" gibi kısa linklerdeki rastgele kod bir ürün adı değildir; adı tarama linkten çözer.
+      if (/^(?:www\.)?(?:ty\.gl|app\.hb\.biz|hb\.biz|amzn\.to|amzn\.eu|a\.co|n11\.app\.link)$/i.test(u.hostname)) return "";
+      if (!/\s/.test(name) && name.length >= 8 && /\d/.test(name)) return "";
+      return name;
     } catch { return ""; }
   }
 
@@ -307,10 +312,14 @@
   function gcard(i) {
     const c = unit(i), p = num(i.prev_price), q = qty(i);
     const bb = bigBest(i);
+    const cands = Array.isArray(i.candidates) ? i.candidates : [];
+    // Eşleşme seçimi bekleyen ürün: adaylar kartın üzerinde, tek dokunuşla seçilir.
+    const quick = needsPick(i) && cands.length
+      ? `<div class="qlabel">Hangisi? Dokun, seç</div><div class="qpick">${cands.slice(0, 3).map((c, k) => `<button type="button" class="qp" data-id="${i.id}" data-idx="${k}" title="${esc(c.title)}"><span class="qt">${esc(c.title)}</span>${c.price != null ? `<b>${tl(c.price)}</b>` : ""}</button>`).join("")}</div>` : "";
     const na = spaceOf(i) === "ortak" ? apprOf(i).length : 0;
     const tags = [
       na >= 2 ? `<span class="tag ok2" title="${esc(apprOf(i).join(", "))}">Ortak ✓✓</span>` : needsMyOk(i) ? `<span class="tag ask" title="${esc(apprOf(i).join(", "))} istiyor">Onayını bekliyor</span>` : na === 1 ? `<span class="tag" title="${esc(apprOf(i).join(", "))}">1 onay</span>` : "",
-      i.akakce_url && !i.match_confirmed ? `<span class="tag chk">Kontrol et</span>` : "",
+      i.match_warn ? `<span class="tag chk">Uyuşmuyor?</span>` : i.akakce_url && !i.match_confirmed ? `<span class="tag chk">Kontrol et</span>` : "",
       `<span class="tag ${prioOf(i)}">${prioOf(i) === "sart" ? "Şart" : "Olsa iyi"}</span>`,
       i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
       i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
@@ -323,8 +332,9 @@
       </div>
       <div class="gbody">
         <div class="gname">${esc(i.name)}</div>
-        <div class="gprice"><b>${needsPick(i) ? "Eşleşme seç" : c != null ? tl(c) : "…"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}</div>
-        <div class="gstore">${needsPick(i) ? "doğru ürünü seç" : c != null ? esc(i.best_store || "") : "ilk tarama bekleniyor"}</div>
+        ${quick}
+        <div class="gprice" ${quick ? "hidden" : ""}><b>${needsPick(i) ? "Eşleşme seç" : c != null ? tl(c) : "…"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}</div>
+        <div class="gstore" ${quick ? "hidden" : ""}>${needsPick(i) ? "doğru ürünü seç" : c != null ? esc(i.best_store || "") : "ilk tarama bekleniyor"}</div>
         ${bb && c != null && bb.price > c + 0.5 ? `<div class="gbig">Büyük mağaza: ${tl(bb.price)}</div>` : ""}
         <div class="tags">${tags}</div>
       </div>
@@ -414,6 +424,8 @@
   let suppressClick = false; // kaydırma hareketinden sonra kartın açılmasını engeller
   $("#items").onclick = async (e) => {
     if (suppressClick) return;
+    const qp = e.target.closest(".qp");
+    if (qp && !selMode) { e.stopPropagation(); return pickCandidate(qp.dataset.id, Number(qp.dataset.idx)); }
     const card0 = e.target.closest(".gcard");
     if (selMode) {
       if (!card0) return;
@@ -432,6 +444,25 @@
     const card = e.target.closest(".gcard");
     if (card) openDetail(card.dataset.id);
   };
+  // Aday seçimi (kartta ya da detayda). Akakçe aramasındaki fiyat hemen gösterilir; tam mağaza listesi taramada gelir.
+  async function pickCandidate(id, idx) {
+    const it = items.find((x) => x.id === id);
+    const c = it && (it.candidates || [])[idx];
+    if (!c) return false;
+    const patch = { akakce_url: c.url, match_confirmed: true, match_state: "confirmed", match_note: null, match_warn: null, last_error: null,
+      current_price: typeof c.price === "number" ? c.price : null, prev_price: null, lowest_price: null, highest_price: null, offers: [], offers_total: null, image_url: c.image || null };
+    if (!it.name || it.name === nameFromUrl(it.source_url || "") || it.name === "İsimsiz ürün") patch.name = c.title; // adı kullanıcı yazmadıysa gerçek ürün adını al
+    const ok = await upd(id, patch);
+    if (ok) { if (getTok()) $("#refreshBtn").click(); else toast("Seçildi. Mağaza fiyatları taramada gelir, hemen görmek için \"Fiyatları yenile\"ye bas."); }
+    return ok;
+  }
+  async function requestResearch(id) {
+    if (!confirm("Akakçe'de yeniden aranacak. Yeni bir ürün seçene kadar fiyat güncellenmez. Devam edilsin mi?")) return;
+    const ok = await upd(id, { match_state: "pick", akakce_url: null, match_confirmed: false, candidates: [], match_note: null, match_warn: null });
+    if (openId) detailDlg.close();
+    if (ok) { if (getTok()) $("#refreshBtn").click(); else toast("Adaylar bir sonraki taramada gelecek."); }
+  }
+
   // "Aldık" / "Geri al": yanlışlıkla basılırsa 6 saniye boyunca geri alınabilir.
   async function setBought(id, bought) {
     const it = items.find((x) => x.id === id);
@@ -444,7 +475,7 @@
   $("#items").addEventListener("pointerdown", (e) => {
     if (selMode || e.pointerType === "mouse") return;
     const card = e.target.closest(".gcard");
-    if (!card || e.target.closest(".quick")) return;
+    if (!card || e.target.closest(".quick") || e.target.closest(".qp")) return;
     sw = { card, id: card.dataset.id, x0: e.clientX, y0: e.clientY, dx: 0, active: false, pid: e.pointerId };
   });
   $("#items").addEventListener("pointermove", (e) => {
@@ -574,7 +605,8 @@
     e.target.reset();
     $("#fQty").value = 1;
     addDlg.close();
-    load();
+    await load();
+    scheduleScan();
   };
 
   // ---------- ürün detayı ----------
@@ -634,6 +666,7 @@
       <div class="sheet-head"><h2>Ürün detayı</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
       <div class="d-img"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}</div>
       <input id="dName" class="d-name" value="${esc(i.name)}" aria-label="Ürün adı">
+      ${i.source_title ? `<div class="hint" style="padding:0">Linkindeki ürün: <b>${esc(i.source_title)}</b></div>` : ""}
       <div class="d-price"><b>${tl(c)}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 && c != null ? `<span>× ${q} = <b style="font-size:18px">${tl(c * q)}</b></span>` : ""}</div>
       <div class="d-badges">${overlayBadges(i)}</div>
       ${spaceOf(i) === "ortak" ? `      <div class="sec">Ortak karar</div>
@@ -643,6 +676,7 @@
       </div>` : ""}
       ${c != null ? `<div class="hint" style="padding:0">En ucuz: ${i.best_url ? `<a href="${esc(safeUrl(i.best_url))}" target="_blank" rel="noopener">${esc(i.best_store || "")}</a>` : esc(i.best_store || "")}${i.last_checked ? " · tarandı " + fmt(i.last_checked) : ""}</div>` : `<div class="hint" style="padding:0">İlk tarama bekleniyor (en geç 2 saat). Üstteki "Fiyatları yenile" ile hemen başlatabilirsin.</div>`}
       ${warn}
+      ${i.match_warn && !i.purchased ? `<div class="warn">${esc(i.match_warn)} <button type="button" class="btn" data-act="okwarn">Doğru, böyle kalsın</button><button type="button" class="btn" data-act="more-cands">Başka ürün seç</button><button type="button" class="btn" data-act="research">Yeniden ara</button></div>` : ""}
       ${candBlock(i)}
       ${i.last_error ? `<div class="err">⚠ ${esc(i.last_error)}</div>` : ""}
       <div id="offersBox">${offersBlock(i)}</div>
@@ -737,7 +771,7 @@
       if (ok) detailDlg.close();
     } else if (act === "buy") { await upd(id, { purchased: true, purchased_at: new Date().toISOString() }); detailDlg.close(); }
     else if (act === "undo") { await upd(id, { purchased: false, purchased_at: null }); detailDlg.close(); }
-    else if (act === "ok") { await upd(id, { match_confirmed: true, match_state: "confirmed", match_note: null }); openDetail(id); }
+    else if (act === "ok" || act === "okwarn") { await upd(id, { match_confirmed: true, match_state: "confirmed", match_note: null, match_warn: "" }); openDetail(id); } // match_warn "" = "doğru dedim, bir daha uyarma"
     else if (act === "appr") {
       const it = items.find((x) => x.id === id);
       if (!me()) return alert("Önce adını yaz: sağ üstteki \"Ekleyen\" yazısına dokun.");
@@ -752,22 +786,10 @@
     } else if (act === "offers-more") { offersOpen = !offersOpen; refreshOffers(); }
     else if (act === "more-cands") {
       const it = items.find((x) => x.id === id);
-      if (it && (it.candidates || []).length) { const d = $("#detail .cands"); if (d) { d.open = true; d.scrollIntoView({ block: "center" }); } return; }
-      if (!confirm("Akakçe'de yeniden aranacak, adaylar sonraki taramada gelecek. Yeni bir ürün seçene kadar fiyat güncellenmez. Devam edilsin mi?")) return;
-      await upd(id, { match_state: "pick", akakce_url: null, match_confirmed: false, candidates: [], match_note: null });
-      detailDlg.close();
-    } else if (act === "pickc") {
-      const it = items.find((x) => x.id === id);
-      const c = it && (it.candidates || [])[Number(b.dataset.idx)];
-      if (!c) return;
-      const patch = { akakce_url: c.url, match_confirmed: true, match_state: "confirmed", match_note: null, last_error: null, current_price: null, prev_price: null, lowest_price: null, highest_price: null, offers: [], offers_total: null, image_url: c.image || null };
-      if (it.name === nameFromUrl(it.source_url || "") || it.name === "İsimsiz ürün") patch.name = c.title; // adı kullanıcı yazmadıysa gerçek ürün adını al
-      if (await upd(id, patch)) {
-        detailDlg.close();
-        if (getTok()) $("#refreshBtn").click();
-        else alert("Eşleşme kaydedildi. Fiyat bir sonraki taramada gelir; hemen görmek için üstteki \"Fiyatları yenile\"ye bas.");
-      }
-    }
+      if (it && (it.candidates || []).length && !it.match_warn) { const d = $("#detail .cands"); if (d) { d.open = true; d.scrollIntoView({ block: "center" }); } return; }
+      await requestResearch(id);
+    } else if (act === "research") { await requestResearch(id); }
+    else if (act === "pickc") { if (await pickCandidate(id, Number(b.dataset.idx))) detailDlg.close(); }
     else if (act === "fix") {
       const u = prompt("Doğru Akakçe ürün linkini yapıştır:");
       if (!u) return;
@@ -782,6 +804,15 @@
       load();
     }
   };
+
+  // Ürün ekleyince (anahtar kayıtlıysa) taramayı kendiliğinden başlat; peş peşe eklemelerde son eklemeden 12 sn sonra bir kere.
+  let scanTimer;
+  function scheduleScan() {
+    if (!getTok() || !repoInfo()) return;
+    toast("Eklendi. Ürünün adı ve fiyatı birkaç saniye içinde gelir.");
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(() => { const b = $("#refreshBtn"); if (!b.disabled) b.click(); }, 12000);
+  }
 
   // ---------- manuel fiyat yenileme (GitHub Actions taramasını başlatır) ----------
   const getTok = () => { try { return localStorage.getItem("ghtok") || ""; } catch { return ""; } };
