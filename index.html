@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Çeyiz Listesi</title>
+<meta name="theme-color" content="#1f6f5c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🏠 Çeyiz Listesi</h1>
+  <div class="who">Ekleyen: <button id="whoBtn" type="button">—</button></div>
+</header>
+
+<main>
+  <div id="setup" class="notice" hidden>
+    <b>Kurulum eksik.</b> <code>config.js</code> dosyasına Supabase adresini ve anahtarını yazman lazım. README.md'deki adımlara bak.
+  </div>
+
+  <form id="addForm" class="card add">
+    <input id="fUrl" type="url" placeholder="Ürün linkini yapıştır" required>
+    <input id="fName" type="text" placeholder="Ürün adı (boşsa linkten çıkarırım)">
+    <div class="row">
+      <input id="fCat" list="cats" type="text" placeholder="Kategori">
+      <datalist id="cats"></datalist>
+      <input id="fTarget" type="number" min="0" step="1" inputmode="numeric" placeholder="Hedef fiyat ₺">
+    </div>
+    <button type="submit">Listeye ekle</button>
+  </form>
+
+  <nav class="tabs">
+    <button data-tab="list" class="on">Liste <span id="cList"></span></button>
+    <button data-tab="deals">İndirimler <span id="cDeals"></span></button>
+    <button data-tab="bought">Alınanlar <span id="cBought"></span></button>
+  </nav>
+
+  <div id="summary" class="summary"></div>
+  <div id="items"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
