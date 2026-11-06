@@ -31,8 +31,9 @@ export function parseProduct(html) {
     } catch {
       continue;
     }
-    if (d["@type"] !== "Product" || !d.offers) continue;
-    const o = d.offers;
+       const types = [].concat(d["@type"] || []);
+    if (!types.some((t) => t === "Product" || t === "ProductGroup") || !d.offers) continue;
+    const o = Array.isArray(d.offers) ? d.offers[0] : d.offers;
     const list = (o.offers || [])
       .map((x) => ({
         price: parseFloat(x.price),
