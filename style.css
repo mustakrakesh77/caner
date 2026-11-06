@@ -1,4 +1,4 @@
-/* Çeyiz Listesi — "ev dekoru dergisi" teması: krem zemin, serif başlık/fiyat, ince çizgiler */
+/* SC İhtiyaç Listesi — "ev dekoru dergisi" teması: krem zemin, serif başlık/fiyat, ince çizgiler */
 /* Temalar: varsayılan Krem; "Otomatik" telefonun karanlık ayarını izler; Koyu / Adaçayı / Lacivert elle seçilir. */
 :root{
   --serif:"Fraunces",Georgia,"Times New Roman",serif;
@@ -49,10 +49,11 @@ a{color:var(--accent)}
 
 /* Başlık */
 .hero{padding:22px 18px 0;padding-top:calc(22px + env(safe-area-inset-top))}
+.hero-top>div:first-child{flex:1;min-width:0}
 .hero-top{max-width:1080px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line-strong);position:relative}
 .hero-top::after{content:"";position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid var(--line)}
 .eyebrow{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
-h1{font:400 36px/1.05 var(--serif);margin:0;letter-spacing:-.01em}
+h1{font:400 clamp(25px,6.8vw,36px)/1.08 var(--serif);margin:0;letter-spacing:-.01em}
 h1 em{font-style:italic;color:var(--accent)}
 .who{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);text-align:right;line-height:1.5}
 .who button{background:none;border:0;padding:0;font:500 14px var(--serif);letter-spacing:0;text-transform:none;color:var(--ink);text-decoration:underline;text-underline-offset:3px}

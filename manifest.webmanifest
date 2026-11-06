@@ -1,6 +1,6 @@
 {
-  "name": "Çeyiz Listesi",
-  "short_name": "Çeyiz",
+  "name": "SC İhtiyaç Listesi",
+  "short_name": "SC İhtiyaç",
   "description": "Ev kurarken ortak ihtiyaç listemiz: fiyatlar, bütçe, kararlar.",
   "lang": "tr",
   "start_url": "./",

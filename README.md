@@ -1,4 +1,4 @@
-# Çeyiz Listesi – kurulum (yaklaşık 15 dk)
+# SC İhtiyaç Listesi – kurulum (yaklaşık 15 dk)
 
 Üç parça var: **Supabase** (ortak liste burada durur), **GitHub Pages** (uygulamanın sitesi), **GitHub Actions** (2 saatte bir fiyat tarar). Hepsi ücretsiz.
 
