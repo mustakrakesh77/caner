@@ -57,3 +57,9 @@ create table if not exists settings (
 alter table settings enable row level security;
 drop policy if exists "settings_all" on settings;
 create policy "settings_all" on settings for all to anon using (true) with check (true);
+
+-- ===== v3: eşleşme doğrulama ve aday seçimi =====
+alter table items add column if not exists candidates jsonb default '[]'::jsonb;  -- Akakçe aday listesi
+alter table items add column if not exists match_state text;                      -- 'verified' | 'guess' | 'pick' | 'confirmed'
+alter table items add column if not exists match_note text;                       -- eşleşmenin nedeni / uyarı
+alter table items add column if not exists offers_total int;                         -- Akakçe'deki toplam teklif sayısı

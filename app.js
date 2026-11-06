@@ -11,7 +11,10 @@
   let budget = null;
   let tab = "list";
   let openId = null;
-  const F = { q: "", prio: "all", who: "all", cat: "all", sort: "cat" };
+  const F = { q: "", prio: "all", who: "all", cat: "all", pick: "all", sort: "cat" };
+  let offerMode = "all"; // mağaza listesi: "all" | "big"
+  try { offerMode = localStorage.getItem("offerMode") === "big" ? "big" : "all"; } catch {}
+  let offersOpen = false;
   let selMode = false;
   const sel = new Set();
 
@@ -35,6 +38,10 @@
   };
   const hitTarget = (i) => unit(i) != null && num(i.target_price) != null && unit(i) <= num(i.target_price);
   const isDeal = (i) => dropPct(i) > 0 || hitTarget(i) || isLowest(i);
+  const needsPick = (i) => !i.akakce_url && i.match_state === "pick"; // eşleşme seçimi bekliyor
+  const isBig = (store) => (window.Stores ? Stores.isBig(store) : false);
+  const offersOf = (i) => (Array.isArray(i.offers) ? i.offers : []).filter((o) => o && o.price != null);
+  const bigBest = (i) => offersOf(i).filter((o) => isBig(o.store)).sort((a, b) => a.price - b.price)[0] || null;
 
   // ---------- kategoriler ----------
   const CATS = (window.Categories && Categories.LIST) || [];
@@ -143,6 +150,9 @@
     const chip = (kind, val, label) => `<button type="button" class="chip ${F[kind] === val ? "on" : ""}" data-kind="${kind}" data-val="${esc(val)}">${label}</button>`;
     let h = chip("prio", "all", "Hepsi") + chip("prio", "sart", "Şart") + chip("prio", "iyi", "Olsa iyi");
     if (people.length) h += `<span class="sep"></span>` + chip("who", "all", "Herkes") + people.map((p) => chip("who", p, esc(p))).join("");
+    const nPick = items.filter((i) => !i.purchased && needsPick(i)).length;
+    if (F.pick === "1" && !nPick) F.pick = "all";
+    if (nPick) h += `<span class="sep"></span>` + chip("pick", "1", `Eşleşme seç (${nPick})`);
     $("#chips").innerHTML = h;
     fillCategorySelects();
     const names = new Set([...people, ...items.map((i) => (i.added_by || "").trim()).filter(Boolean), getWho()].filter(Boolean));
@@ -151,7 +161,7 @@
   $("#chips").onclick = (e) => {
     const b = e.target.closest(".chip");
     if (!b) return;
-    F[b.dataset.kind] = b.dataset.val;
+    F[b.dataset.kind] = b.dataset.kind === "pick" && F.pick === b.dataset.val ? "all" : b.dataset.val; // Eşleşme çipi aç/kapa
     render();
   };
   $("#q").oninput = (e) => { F.q = e.target.value; render(); };
@@ -167,6 +177,7 @@
     if (F.prio !== "all") list = list.filter((i) => prioOf(i) === F.prio);
     if (F.who !== "all") list = list.filter((i) => (i.assignee || "").trim() === F.who);
     if (F.cat !== "all") list = list.filter((i) => catOf(i) === F.cat);
+    if (F.pick === "1") list = list.filter(needsPick);
     const byPrice = (a, b) => (unit(a) ?? Infinity) - (unit(b) ?? Infinity);
     if (F.sort === "price-asc") list = [...list].sort(byPrice);
     else if (F.sort === "price-desc") list = [...list].sort((a, b) => (unit(b) ?? -1) - (unit(a) ?? -1));
@@ -175,7 +186,7 @@
   }
 
   function overlayBadges(i) {
-    let h = "";
+    let h = needsPick(i) ? `<span class="badge b-pick">Aday seç</span>` : "";
     const d = dropPct(i);
     if (d) h += `<span class="badge b-down">↓ %${d}</span>`;
     else if (unit(i) != null && num(i.prev_price) != null && unit(i) > num(i.prev_price)) h += `<span class="badge b-up">↑ %${Math.round(((unit(i) - num(i.prev_price)) / num(i.prev_price)) * 100)}</span>`;
@@ -189,7 +200,9 @@
 
   function gcard(i) {
     const c = unit(i), p = num(i.prev_price), q = qty(i);
+    const bb = bigBest(i);
     const tags = [
+      i.akakce_url && !i.match_confirmed ? `<span class="tag chk">Kontrol et</span>` : "",
       `<span class="tag ${prioOf(i)}">${prioOf(i) === "sart" ? "Şart" : "Olsa iyi"}</span>`,
       i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
       i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
@@ -201,8 +214,9 @@
       </div>
       <div class="gbody">
         <div class="gname">${esc(i.name)}</div>
-        <div class="gprice"><b>${c != null ? tl(c) : "…"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}</div>
-        <div class="gstore">${c != null ? esc(i.best_store || "") : "ilk tarama bekleniyor"}</div>
+        <div class="gprice"><b>${needsPick(i) ? "Eşleşme seç" : c != null ? tl(c) : "…"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}</div>
+        <div class="gstore">${needsPick(i) ? "doğru ürünü seç" : c != null ? esc(i.best_store || "") : "ilk tarama bekleniyor"}</div>
+        ${bb && c != null && bb.price > c + 0.5 ? `<div class="gbig">Büyük mağaza: ${tl(bb.price)}</div>` : ""}
         <div class="tags">${tags}</div>
       </div>
     </article>`;
@@ -227,7 +241,7 @@
     $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""}` : "";
 
     if (!list.length) {
-      const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all";
+      const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all" || F.pick !== "all";
       $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
     } else if (F.sort === "cat") {
       const groups = {};
@@ -334,6 +348,7 @@
       source_url: url,
       akakce_url: isAk ? url : null,
       match_confirmed: isAk,
+      match_state: isAk ? "confirmed" : null,
       category: cat,
       quantity: Math.max(1, Number($("#fQty").value) || 1),
       priority: $("#fPrio").value,
@@ -351,15 +366,58 @@
   };
 
   // ---------- ürün detayı ----------
+  // Mağaza listesi: Akakçe sayfaya en ucuz ~16 teklifi verir (toplam sayı ayrıca belirtilir); "Büyük mağazalar" süzgeci.
+  function offersBlock(i) {
+    const all = offersOf(i).sort((a, b) => a.price - b.price);
+    if (!all.length) return "";
+    const big = all.filter((o) => isBig(o.store));
+    const list = offerMode === "big" ? big : all;
+    const shown = offersOpen ? list : list.slice(0, 8);
+    const total = num(i.offers_total);
+    const cb = big[0];
+    const row = (o) => {
+      const label = esc(String(o.store).replace("/", " · "));
+      return `<li><span class="of-store">${o.url ? `<a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">${label}</a>` : label}${offerMode !== "big" && isBig(o.store) ? ` <i class="bigmark">büyük</i>` : ""}</span>
+        <span class="of-price"><b>${tl(o.price)}</b>${o.ship > 0 ? `<small>+${tl(o.ship)} kargo</small>` : ""}</span></li>`;
+    };
+    return `<div class="sec">Mağazalar</div>
+      <div class="hint" style="padding:0">${all.length} teklif listeleniyor${total && total > all.length ? ` · Akakçe'de toplam ${total} (en ucuz ${all.length}'sı burada)` : ""}</div>
+      ${cb ? `<div class="hint" style="padding:0">Büyük mağazada en ucuz: <b>${tl(cb.price)}</b> (${esc(String(cb.store).replace("/", " · "))})${cb.price > all[0].price + 0.5 ? ` · genel en ucuzdan ${tl(cb.price - all[0].price)} fazla` : ""}</div>` : `<div class="hint" style="padding:0">Listede büyük mağaza yok.</div>`}
+      <div class="seg"><button type="button" data-act="offers-all" class="${offerMode === "all" ? "on" : ""}">Tümü (${all.length})</button><button type="button" data-act="offers-big" class="${offerMode === "big" ? "on" : ""}">Büyük mağazalar (${big.length})</button></div>
+      ${list.length ? `<ul class="offers">${shown.map(row).join("")}</ul>` : `<div class="hint">Bu süzgeçle teklif yok. "Tümü"ne bak.</div>`}
+      ${list.length > 8 ? `<button type="button" class="linkbtn2" data-act="offers-more">${offersOpen ? "Daha az göster" : `Tümünü göster (${list.length})`}</button>` : ""}
+      ${total && total > all.length && i.akakce_url ? `<a class="hint" href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe'de tüm ${total} teklifi gör →</a>` : ""}`;
+  }
+  const refreshOffers = () => {
+    const i = items.find((x) => x.id === openId);
+    if (i && $("#offersBox")) $("#offersBox").innerHTML = offersBlock(i);
+  };
+
+  // Aday ürünler: eşleşme belirsizse ya da kullanıcı başka ürün isterse.
+  function candBlock(i) {
+    const cands = Array.isArray(i.candidates) ? i.candidates : [];
+    if (!cands.length) return needsPick(i) ? `<div class="warn">Adaylar sonraki taramada gelecek. Hemen görmek için üstteki "Fiyatları yenile"ye bas.</div>` : "";
+    const urgent = needsPick(i) || (i.akakce_url && !i.match_confirmed);
+    const rows = cands.map((c, k) => {
+      const cur = c.url === i.akakce_url;
+      const img = c.image && /^https:\/\//.test(c.image) ? `<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
+      return `<li class="cand ${cur ? "cur" : ""}"><span class="cthumb">${img}</span>
+        <span class="cinfo"><b>${esc(c.title)}</b><small>${c.price != null ? `en ucuz ${tl(c.price)}` : ""}${c.offers ? ` · ${c.offers} teklif` : ""} · <a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">Akakçe'de bak</a></small></span>
+        ${cur ? `<span class="curmark">Seçili</span>` : `<button type="button" class="btn" data-act="pickc" data-idx="${k}">Bunu seç</button>`}</li>`;
+    }).join("");
+    return `<details class="cands" ${urgent ? "open" : ""}><summary>${urgent ? "Doğru ürünü seç" : "Başka ürün mü? Adaylara bak"} (${cands.length})</summary>
+      ${i.match_note ? `<div class="hint">${esc(i.match_note)}</div>` : ""}<ul class="candlist">${rows}</ul></details>`;
+  }
+
   function openDetail(id) {
     const i = items.find((x) => x.id === id);
     if (!i) return;
     openId = id;
-    const offers = Array.isArray(i.offers) ? i.offers : [];
+    offersOpen = false;
     const c = unit(i), p = num(i.prev_price), q = qty(i);
     const warn = i.akakce_url && !i.match_confirmed && !i.purchased
-      ? `<div class="warn">Bu eşleşme doğru mu? <a href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe sayfasına bak</a>
-         <button type="button" class="btn" data-act="ok">Doğru</button><button type="button" class="btn" data-act="fix">Yanlış, link gireceğim</button></div>` : "";
+      ? `<div class="warn">${esc(i.match_note || "Bu eşleşme doğru mu?")} <a href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe sayfasına bak</a>
+         <button type="button" class="btn" data-act="ok">Doğru</button><button type="button" class="btn" data-act="more-cands">Başka aday</button><button type="button" class="btn" data-act="fix">Yanlış, link gireceğim</button></div>` : "";
     $("#detail").innerHTML = `
       <div class="sheet-head"><h2>Ürün detayı</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
       <div class="d-img"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}</div>
@@ -368,8 +426,9 @@
       <div class="d-badges">${overlayBadges(i)}</div>
       ${c != null ? `<div class="hint" style="padding:0">En ucuz: ${i.best_url ? `<a href="${esc(safeUrl(i.best_url))}" target="_blank" rel="noopener">${esc(i.best_store || "")}</a>` : esc(i.best_store || "")}${i.last_checked ? " · tarandı " + fmt(i.last_checked) : ""}</div>` : `<div class="hint" style="padding:0">İlk tarama bekleniyor (en geç 2 saat). Üstteki "Fiyatları yenile" ile hemen başlatabilirsin.</div>`}
       ${warn}
+      ${candBlock(i)}
       ${i.last_error ? `<div class="err">⚠ ${esc(i.last_error)}</div>` : ""}
-      ${offers.length > 1 ? `<div class="sec">Mağazalar</div><ul class="offers">${offers.map((o) => `<li><a href="${esc(safeUrl(o.url))}" target="_blank" rel="noopener">${esc(o.store)}</a><b>${tl(o.price)}</b></li>`).join("")}</ul>` : ""}
+      <div id="offersBox">${offersBlock(i)}</div>
       <div class="sec">Fiyat geçmişi</div>
       <div id="chart" class="chart"><div class="hint">Yükleniyor…</div></div>
       <div class="sec">Düzenle</div>
@@ -459,12 +518,36 @@
       if (ok) detailDlg.close();
     } else if (act === "buy") { await upd(id, { purchased: true, purchased_at: new Date().toISOString() }); detailDlg.close(); }
     else if (act === "undo") { await upd(id, { purchased: false, purchased_at: null }); detailDlg.close(); }
-    else if (act === "ok") { await upd(id, { match_confirmed: true }); openDetail(id); }
+    else if (act === "ok") { await upd(id, { match_confirmed: true, match_state: "confirmed", match_note: null }); openDetail(id); }
+    else if (act === "offers-all" || act === "offers-big") {
+      offerMode = act === "offers-big" ? "big" : "all";
+      try { localStorage.setItem("offerMode", offerMode); } catch {}
+      offersOpen = false;
+      refreshOffers();
+    } else if (act === "offers-more") { offersOpen = !offersOpen; refreshOffers(); }
+    else if (act === "more-cands") {
+      const it = items.find((x) => x.id === id);
+      if (it && (it.candidates || []).length) { const d = $("#detail .cands"); if (d) { d.open = true; d.scrollIntoView({ block: "center" }); } return; }
+      if (!confirm("Akakçe'de yeniden aranacak, adaylar sonraki taramada gelecek. Yeni bir ürün seçene kadar fiyat güncellenmez. Devam edilsin mi?")) return;
+      await upd(id, { match_state: "pick", akakce_url: null, match_confirmed: false, candidates: [], match_note: null });
+      detailDlg.close();
+    } else if (act === "pickc") {
+      const it = items.find((x) => x.id === id);
+      const c = it && (it.candidates || [])[Number(b.dataset.idx)];
+      if (!c) return;
+      const patch = { akakce_url: c.url, match_confirmed: true, match_state: "confirmed", match_note: null, last_error: null, current_price: null, prev_price: null, lowest_price: null, highest_price: null, offers: [], offers_total: null, image_url: c.image || null };
+      if (it.name === nameFromUrl(it.source_url || "") || it.name === "İsimsiz ürün") patch.name = c.title; // adı kullanıcı yazmadıysa gerçek ürün adını al
+      if (await upd(id, patch)) {
+        detailDlg.close();
+        if (getTok()) $("#refreshBtn").click();
+        else alert("Eşleşme kaydedildi. Fiyat bir sonraki taramada gelir; hemen görmek için üstteki \"Fiyatları yenile\"ye bas.");
+      }
+    }
     else if (act === "fix") {
       const u = prompt("Doğru Akakçe ürün linkini yapıştır:");
       if (!u) return;
       if (!/akakce\.com/i.test(u)) return alert("Bu bir Akakçe linki değil.");
-      await upd(id, { akakce_url: u.trim(), match_confirmed: true, last_error: null, current_price: null, prev_price: null, lowest_price: null, highest_price: null });
+      await upd(id, { akakce_url: u.trim(), match_confirmed: true, match_state: "confirmed", match_note: null, last_error: null, current_price: null, prev_price: null, lowest_price: null, highest_price: null, offers: [], offers_total: null });
       detailDlg.close();
     } else if (act === "del") {
       if (!confirm("Bu ürün listeden silinsin mi?")) return;

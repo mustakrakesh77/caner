@@ -185,3 +185,29 @@ body.selmode #fab,.selmode .quick{display:none}
 .selmode .pick{display:flex;position:absolute;right:8px;top:8px;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--surface);align-items:center;justify-content:center;font-size:14px;color:transparent;z-index:3}
 .gcard.picked{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .gcard.picked .pick{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+
+/* Eşleşme doğrulama + mağaza listesi */
+.b-pick{background:var(--rust);border-color:var(--rust);color:#fff}
+.tag.chk{color:var(--ochre);font-weight:700}
+.gbig{font-size:11px;color:var(--mute);letter-spacing:.04em}
+.seg{display:flex;border:1px solid var(--line-strong);width:100%;margin:8px 0 2px}
+.seg button{flex:1;background:none;border:0;padding:9px 6px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--mute)}
+.seg button.on{background:var(--ink);color:var(--bg)}
+.offers .of-store{min-width:0;overflow-wrap:anywhere}
+.offers .of-store a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.offers .of-price{text-align:right;white-space:nowrap}
+.offers .of-price small{display:block;font-size:11px;color:var(--mute)}
+.bigmark{font-style:normal;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--sage);border:1px solid var(--sage);padding:0 4px;margin-left:4px;vertical-align:1px}
+.linkbtn2{background:none;border:0;color:var(--accent);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;text-decoration:underline;text-underline-offset:3px;padding:6px 0;text-align:left}
+.cands{border:1px solid var(--line);background:var(--surface);padding:10px 12px}
+.cands summary{cursor:pointer;color:var(--accent);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.candlist{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:10px}
+.cand{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;padding-top:10px;border-top:1px solid var(--line)}
+.cand.cur{background:var(--accent-soft);margin:0 -6px;padding:10px 6px}
+.cthumb{width:52px;height:52px;background:var(--photo);border:1px solid var(--line);position:relative;display:block}
+.cthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:3px}
+.cinfo{min-width:0}
+.cinfo b{display:block;font:500 14px/1.3 var(--serif)}
+.cinfo small{display:block;font-size:11.5px;color:var(--mute);margin-top:2px}
+.curmark{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+.cand .btn{padding:7px 10px}

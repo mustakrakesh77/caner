@@ -1,4 +1,5 @@
 // Akakçe sayfalarından fiyat okuyan yardımcılar.
+import { decode } from "./match.mjs";
 
 export const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -22,6 +23,46 @@ export function findProductUrl(html) {
   return m ? "https://www.akakce.com" + m[1] : null;
 }
 
+// Akakçe sayfaya en ucuz ~16 teklifi (kargo, stok, satıcı ile) bir "astro-island" bloğu olarak gömer; JSON-LD ise sadece 10 teklif verir.
+// Astro serileştirmesi: [0, değer] = düz değer, [1, [...]] = dizi.
+function unwrap(v) {
+  if (Array.isArray(v) && v.length === 2 && (v[0] === 0 || v[0] === 1)) {
+    if (v[0] === 1) return v[1].map(unwrap);
+    const x = v[1];
+    return x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, unwrap(y)])) : x;
+  }
+  return v;
+}
+
+function islandOffers(html, ldOffers) {
+  for (const m of html.matchAll(/<astro-island[^>]*?props="([^"]*)"/g)) {
+    const raw = decode(m[1]);
+    if (!raw.includes("initialPgList")) continue;
+    try {
+      const d = JSON.parse(raw);
+      const list = unwrap(d.initialPgList) || [];
+      const total = unwrap(d.initialFilter)?.info?.totalPgCount ?? null;
+      const offers = list
+        .map((o) => {
+          const price = Number(o.price);
+          const store = o.pgNick && o.vdName ? `${o.vdName}/${o.pgNick}` : o.vdName || "?";
+          // Doğrudan mağaza linki JSON-LD'de varsa onu, yoksa Akakçe'nin yönlendirme linkini kullan.
+          const direct = ldOffers.find((x) => Math.abs(x.price - price) < 0.01 && String(x.store).toLowerCase() === store.toLowerCase());
+          let url = direct?.url || null;
+          if (!url && typeof o.url === "string") {
+            const f = new URLSearchParams(o.url.split("?")[1] || "").get("f");
+            if (f && f.startsWith("/")) url = "https://www.akakce.com" + f;
+          }
+          return { price, store, url, ship: o.shipPrice != null ? Number(o.shipPrice) : null, stock: o.stock != null ? Number(o.stock) : null };
+        })
+        .filter((o) => Number.isFinite(o.price))
+        .sort((a, b) => a.price - b.price);
+      if (offers.length) return { offers, total: Number.isFinite(Number(total)) ? Number(total) : null };
+    } catch { /* yapı değiştiyse JSON-LD'ye düşülür */ }
+  }
+  return null;
+}
+
 export function parseProduct(html) {
   const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
   for (const b of blocks) {
@@ -34,14 +75,12 @@ export function parseProduct(html) {
     const types = [].concat(d["@type"] || []);
     if (!types.some((t) => t === "Product" || t === "ProductGroup") || !d.offers) continue;
     const o = Array.isArray(d.offers) ? d.offers[0] : d.offers;
-    const list = (o.offers || [])
-      .map((x) => ({
-        price: parseFloat(x.price),
-        store: x.seller?.name || "?",
-        url: x.url || null,
-      }))
+    const ld = (o.offers || [])
+      .map((x) => ({ price: parseFloat(x.price), store: x.seller?.name || "?", url: x.url || null }))
       .filter((x) => Number.isFinite(x.price))
       .sort((a, b) => a.price - b.price);
+    const rich = islandOffers(html, ld);
+    const list = rich ? rich.offers : ld;
     const low = list[0]?.price ?? parseFloat(o.lowPrice);
     if (!Number.isFinite(low)) continue;
     const img0 = [].concat(d.image || [])[0];
@@ -55,7 +94,8 @@ export function parseProduct(html) {
       price: low,
       store: list[0]?.store || null,
       url: list[0]?.url || null,
-      offers: list.slice(0, 6),
+      offers: list.slice(0, 120),
+      total: rich?.total ?? (Number(o.offerCount) || null), // Akakçe'deki toplam teklif sayısı (listede gösterilenden fazla olabilir)
     };
   }
   return null;
