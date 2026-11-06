@@ -17,6 +17,11 @@
   let offersOpen = false;
   let selMode = false;
   const sel = new Set();
+  // Listeler: "ortak" = İhtiyaçlar; her kişinin kendi wishlist'i. Kişi eklemek/değiştirmek için bu satır yeterli.
+  const PEOPLE = ["Sıla", "Caner"];
+  const SPACES = ["ortak", ...PEOPLE];
+  let space = "ortak";
+  try { const sp = localStorage.getItem("space"); if (SPACES.includes(sp)) space = sp; } catch {}
 
   // ---------- yardımcılar ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -57,14 +62,15 @@
     (withAuto ? `<option value="Genel" ${selected === "Genel" ? "selected" : ""}>Otomatik (ben ayırırım)</option>` : "") +
     allCats().map((c) => `<option value="${esc(c)}" ${c === selected ? "selected" : ""}>${esc(c)}</option>`).join("");
   function fillCategorySelects() {
-    const base = items.filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
+    const base = cur().filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
     const counts = {};
     base.forEach((i) => { counts[catOf(i)] = (counts[catOf(i)] || 0) + 1; });
     const keys = Object.keys(counts).sort((a, b) => catOrder(a) - catOrder(b) || a.localeCompare(b, "tr"));
     if (F.cat !== "all" && !counts[F.cat]) F.cat = "all";
     $("#catSel").innerHTML = `<option value="all">Tüm kategoriler</option>` + keys.map((c) => `<option value="${esc(c)}" ${F.cat === c ? "selected" : ""}>${esc(catLabel(c))} (${counts[c]})</option>`).join("");
-    const fc = $("#fCat"), cur = fc.value || "Genel";
-    fc.innerHTML = catOptions(allCats().includes(cur) ? cur : "Genel", true);
+    const fc = $("#fCat"), chosen = fc.value || "Genel";
+    fc.innerHTML = catOptions(allCats().includes(chosen) ? chosen : "Genel", true);
+    $("#selList").innerHTML = `<option value="">Listeye taşı…</option><option value="__ortak">İhtiyaçlar</option>` + PEOPLE.map((p) => `<option value="${esc(p)}">${esc(p)} wishlist</option>`).join("");
     $("#selCat").innerHTML = `<option value="">Kategori değiştir…</option>` + allCats().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   }
 
@@ -75,9 +81,17 @@
   // ---------- ortak onay + "yeni" rozeti ----------
   const me = () => getWho().trim();
   const lc = (x) => String(x || "").trim().toLocaleLowerCase("tr");
+  const spaceOf = (i) => { const o = lc(i.owner); return PEOPLE.find((p) => lc(p) === o) || "ortak"; };
+  const cur = () => items.filter((i) => spaceOf(i) === space); // bulunduğum listenin ürünleri
+  const spaceLabel = (sp) => (sp === "ortak" ? "İhtiyaçlar" : `${sp} wishlist`);
+  // Başlıklarda CSS büyük harfe çevirir; "wishlist" İngilizce olduğu için lang="en" ile işaretlenir (Türkçe kuralı WİSHLİST yapardı).
+  const spaceLabelHtml = (sp) => (sp === "ortak" ? "İhtiyaçlar" : `${esc(sp)} <span lang="en">wishlist</span>`);
+  const listOptions = (sel) =>
+    `<option value="" ${!sel || sel === "ortak" ? "selected" : ""}>İhtiyaçlar</option>` +
+    PEOPLE.map((p) => `<option value="${esc(p)}" ${sel === p ? "selected" : ""}>${esc(p)} wishlist</option>`).join("");
   const apprOf = (i) => [...new Set((Array.isArray(i.approvals) ? i.approvals : []).map((n) => String(n).trim()).filter(Boolean))];
   const iApproved = (i) => !!me() && apprOf(i).some((n) => lc(n) === lc(me()));
-  const needsMyOk = (i) => !i.purchased && apprOf(i).length > 0 && !iApproved(i); // biri istemiş, ben henüz bakmadım
+  const needsMyOk = (i) => !i.purchased && spaceOf(i) === "ortak" && apprOf(i).length > 0 && !iApproved(i); // biri istemiş, ben henüz bakmadım
   // Son ziyaretten beri başkasının eklediği ("new") ya da değiştirdiği ("chg") ürün. İlk ziyarette hiçbir şey "yeni" sayılmaz.
   let baseline = 0;
   try { baseline = Number(localStorage.getItem("lastVisit")) || 0; localStorage.setItem("lastVisit", String(Date.now())); } catch {}
@@ -163,7 +177,14 @@
 
   // ---------- bütçe ----------
   function renderBudget() {
-    const open = items.filter((i) => !i.purchased), done = items.filter((i) => i.purchased);
+    if (space !== "ortak") {
+      // Wishlist: bütçe yok; kişinin kaç isteği var, toplamı ne kadar, kaçı alınmış.
+      const mine = cur(), want = mine.filter((i) => !i.purchased), got = mine.filter((i) => i.purchased);
+      $("#budget").innerHTML = `<div class="bud-top"><span>${spaceLabelHtml(space)}</span><b class="wtot">${tl(want.reduce((t, i) => t + line(i), 0))}</b></div>
+        <div class="bud-nums" style="margin-top:10px"><span>İstek <b>${want.length}</b></span><span>Alınan <b>${got.length}</b></span>${got.length ? `<span>Alınanların toplamı <b>${tl(got.reduce((t, i) => t + line(i), 0))}</b></span>` : ""}</div>`;
+      return;
+    }
+    const open = cur().filter((i) => !i.purchased), done = cur().filter((i) => i.purchased);
     const spent = done.reduce((s, i) => s + line(i), 0);
     const pend = open.reduce((s, i) => s + line(i), 0);
     let html = `<div class="bud-top"><span>Bütçe</span><button id="budEdit" type="button">${budget != null ? tl(budget) : "Belirle"} <small>düzenle</small></button></div>`;
@@ -178,7 +199,7 @@
     }
     // Oda kartları: her kategori için kaç ürün alındı, ne kadar tutuyor. Karta dokununca o kategoriye süzülür.
     const rooms = {};
-    items.forEach((i) => {
+    cur().forEach((i) => {
       const r = (rooms[catOf(i)] ||= { n: 0, done: 0, spent: 0, plan: 0 });
       r.n++;
       if (i.purchased) { r.done++; r.spent += line(i); } else r.plan += line(i);
@@ -201,8 +222,8 @@
       if (F.cat === c) F.cat = "all";
       else {
         F.cat = c;
-        const hasOpen = items.some((i) => !i.purchased && catOf(i) === c);
-        if (!hasOpen && items.some((i) => i.purchased && catOf(i) === c)) setTab("bought"); // hepsi alınmışsa Alınanlar'a geç
+        const hasOpen = cur().some((i) => !i.purchased && catOf(i) === c);
+        if (!hasOpen && cur().some((i) => i.purchased && catOf(i) === c)) setTab("bought"); // hepsi alınmışsa Alınanlar'a geç
       }
       render();
       return;
@@ -219,14 +240,14 @@
 
   // ---------- filtre çubuğu ----------
   function renderChips() {
-    const people = [...new Set(items.map((i) => (i.assignee || "").trim()).filter(Boolean))];
+    const people = [...new Set(cur().map((i) => (i.assignee || "").trim()).filter(Boolean))];
     const chip = (kind, val, label) => `<button type="button" class="chip ${F[kind] === val ? "on" : ""}" data-kind="${kind}" data-val="${esc(val)}">${label}</button>`;
     let h = chip("prio", "all", "Hepsi") + chip("prio", "sart", "Şart") + chip("prio", "iyi", "Olsa iyi");
     if (people.length) h += `<span class="sep"></span>` + chip("who", "all", "Herkes") + people.map((p) => chip("who", p, esc(p))).join("");
-    const nPick = items.filter((i) => !i.purchased && needsPick(i)).length;
+    const nPick = cur().filter((i) => !i.purchased && needsPick(i)).length;
     if (F.pick === "1" && !nPick) F.pick = "all";
     if (nPick) h += `<span class="sep"></span>` + chip("pick", "1", `Eşleşme seç (${nPick})`);
-    const open0 = items.filter((i) => !i.purchased);
+    const open0 = cur().filter((i) => !i.purchased);
     const nFresh = open0.filter((i) => freshOf(i)).length, nAppr = open0.filter(needsMyOk).length;
     if (F.fresh === "1" && !nFresh) F.fresh = "all";
     if (F.appr === "1" && !nAppr) F.appr = "all";
@@ -251,7 +272,7 @@
 
   // ---------- galeri ----------
   function visible() {
-    let list = items.filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
+    let list = cur().filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
     if (tab === "deals") list = list.filter(isDeal);
     const q = F.q.trim().toLocaleLowerCase("tr");
     if (q) list = list.filter((i) => [i.name, i.category, i.note, i.assignee].join(" ").toLocaleLowerCase("tr").includes(q));
@@ -286,7 +307,7 @@
   function gcard(i) {
     const c = unit(i), p = num(i.prev_price), q = qty(i);
     const bb = bigBest(i);
-    const na = apprOf(i).length;
+    const na = spaceOf(i) === "ortak" ? apprOf(i).length : 0;
     const tags = [
       na >= 2 ? `<span class="tag ok2" title="${esc(apprOf(i).join(", "))}">Ortak ✓✓</span>` : needsMyOk(i) ? `<span class="tag ask" title="${esc(apprOf(i).join(", "))} istiyor">Onayını bekliyor</span>` : na === 1 ? `<span class="tag" title="${esc(apprOf(i).join(", "))}">1 onay</span>` : "",
       i.akakce_url && !i.match_confirmed ? `<span class="tag chk">Kontrol et</span>` : "",
@@ -313,7 +334,7 @@
   // Fırsat şeridi: indirimdeki / hedefe inen / en düşük fiyatlı ürünler, yatay kayar.
   function renderDeals() {
     const el = $("#dealstrip");
-    const deals = items.filter((i) => !i.purchased && isDeal(i)).sort((a, b) => dropPct(b) - dropPct(a) || (unit(a) ?? 0) - (unit(b) ?? 0)).slice(0, 12);
+    const deals = cur().filter((i) => !i.purchased && isDeal(i)).sort((a, b) => dropPct(b) - dropPct(a) || (unit(a) ?? 0) - (unit(b) ?? 0)).slice(0, 12);
     el.hidden = !deals.length;
     if (!deals.length) { el.innerHTML = ""; return; }
     el.innerHTML = `<div class="strip-title">Fırsatlar <small>${deals.length}</small></div><div class="strip">${deals.map((i) => {
@@ -325,14 +346,35 @@
   }
   $("#dealstrip").onclick = (e) => { const b = e.target.closest(".dcard"); if (b) openDetail(b.dataset.id); };
 
+  function renderSpaces() {
+    $("#spaces").innerHTML = SPACES.map((sp) => {
+      const n = items.filter((i) => spaceOf(i) === sp && !i.purchased).length;
+      return `<button type="button" data-space="${esc(sp)}" class="${sp === space ? "on" : ""}">${spaceLabelHtml(sp)}<small>${n}</small></button>`;
+    }).join("");
+  }
+  $("#spaces").onclick = (e) => {
+    const b = e.target.closest("[data-space]");
+    if (!b || b.dataset.space === space) return;
+    space = b.dataset.space;
+    try { localStorage.setItem("space", space); } catch {}
+    // Başka listeye geçince filtreler, arama ve seçim sıfırlanır
+    Object.assign(F, { q: "", prio: "all", who: "all", cat: "all", pick: "all", fresh: "all", appr: "all" });
+    $("#q").value = "";
+    if (selMode) setSelMode(false);
+    tab = "list";
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.tab === "list"));
+    render();
+  };
+
   function render() {
+    renderSpaces();
     renderBudget();
     renderChips();
     renderDeals();
-    const open = items.filter((i) => !i.purchased);
+    const open = cur().filter((i) => !i.purchased);
     $("#cList").textContent = open.length;
     $("#cDeals").textContent = open.filter(isDeal).length;
-    $("#cBought").textContent = items.filter((i) => i.purchased).length;
+    $("#cBought").textContent = cur().filter((i) => i.purchased).length;
     const last = items.map((i) => i.last_checked).filter(Boolean).sort().pop();
     $("#lastScan").textContent = last ? "Son tarama: " + fmt(last) : "Henüz taranmadı";
     const hrs = last ? (Date.now() - new Date(last).getTime()) / 3600000 : 0;
@@ -346,7 +388,7 @@
 
     if (!list.length) {
       const filtered = F.q || F.prio !== "all" || F.who !== "all" || F.cat !== "all" || F.pick !== "all" || F.fresh !== "all" || F.appr !== "all";
-      $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
+      $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? (space === "ortak" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : "Wishlist boş. Sağ alttaki + ile ilk isteği ekle.") : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
     } else if (F.sort === "cat") {
       const groups = {};
       list.forEach((i) => (groups[catOf(i)] ||= []).push(i));
@@ -460,7 +502,7 @@
   function renderSelBar() {
     $("#selCount").textContent = `${sel.size} seçili`;
     const none = sel.size === 0;
-    ["#selBuy", "#selDel", "#selCat"].forEach((s) => ($(s).disabled = none));
+    ["#selBuy", "#selDel", "#selCat", "#selList"].forEach((s) => ($(s).disabled = none));
     $("#selBuy").textContent = tab === "bought" ? "Geri al" : "Aldık";
   }
   async function bulk(patch) {
@@ -480,6 +522,12 @@
     if (!v) return;
     if (await bulk({ category: v })) { await load(); setSelMode(false); } else e.target.value = "";
   };
+  $("#selList").onchange = async (e) => {
+    const v = e.target.value;
+    if (!v) return;
+    const n = sel.size, label = v === "__ortak" ? "İhtiyaçlar" : `${v} wishlist`;
+    if (await bulk({ owner: v === "__ortak" ? null : v })) { await load(); setSelMode(false); toast(`${n} ürün ${label} listesine taşındı`); } else e.target.value = "";
+  };
   $("#selDel").onclick = async () => {
     const ids = [...sel];
     if (!ids.length) return;
@@ -493,7 +541,7 @@
 
   // ---------- ürün ekleme ----------
   const addDlg = $("#addDlg"), detailDlg = $("#detailDlg");
-  $("#fab").onclick = () => { renderChips(); addDlg.showModal(); $("#fUrl").focus(); };
+  $("#fab").onclick = () => { $("#fList").innerHTML = listOptions(space); renderChips(); addDlg.showModal(); $("#fUrl").focus(); };
   [addDlg, detailDlg].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d || e.target.closest("[data-close]")) d.close(); }));
   detailDlg.addEventListener("close", () => { openId = null; });
 
@@ -517,7 +565,8 @@
       target_price: $("#fTarget").value ? Number($("#fTarget").value) : null,
       note: $("#fNote").value.trim() || null,
       added_by: getWho() || null,
-      approvals: me() ? [me()] : [],   // ekleyen kişi ürünü zaten istiyor
+      owner: $("#fList").value || null,
+      approvals: !$("#fList").value && me() ? [me()] : [],   // ortak listede ekleyen kişi ürünü zaten istiyor
       updated_by: me() || null,
     };
     const { error } = await db.from("items").insert(row);
@@ -562,11 +611,11 @@
     if (!cands.length) return needsPick(i) ? `<div class="warn">Adaylar sonraki taramada gelecek. Hemen görmek için üstteki "Fiyatları yenile"ye bas.</div>` : "";
     const urgent = needsPick(i) || (i.akakce_url && !i.match_confirmed);
     const rows = cands.map((c, k) => {
-      const cur = c.url === i.akakce_url;
+      const isCur = c.url === i.akakce_url;
       const img = c.image && /^https:\/\//.test(c.image) ? `<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
-      return `<li class="cand ${cur ? "cur" : ""}"><span class="cthumb">${img}</span>
+      return `<li class="cand ${isCur ? "cur" : ""}"><span class="cthumb">${img}</span>
         <span class="cinfo"><b>${esc(c.title)}</b><small>${c.price != null ? `en ucuz ${tl(c.price)}` : ""}${c.offers ? ` · ${c.offers} teklif` : ""} · <a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">Akakçe'de bak</a></small></span>
-        ${cur ? `<span class="curmark">Seçili</span>` : `<button type="button" class="btn" data-act="pickc" data-idx="${k}">Bunu seç</button>`}</li>`;
+        ${isCur ? `<span class="curmark">Seçili</span>` : `<button type="button" class="btn" data-act="pickc" data-idx="${k}">Bunu seç</button>`}</li>`;
     }).join("");
     return `<details class="cands" ${urgent ? "open" : ""}><summary>${urgent ? "Doğru ürünü seç" : "Başka ürün mü? Adaylara bak"} (${cands.length})</summary>
       ${i.match_note ? `<div class="hint">${esc(i.match_note)}</div>` : ""}<ul class="candlist">${rows}</ul></details>`;
@@ -587,11 +636,11 @@
       <input id="dName" class="d-name" value="${esc(i.name)}" aria-label="Ürün adı">
       <div class="d-price"><b>${tl(c)}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 && c != null ? `<span>× ${q} = <b style="font-size:18px">${tl(c * q)}</b></span>` : ""}</div>
       <div class="d-badges">${overlayBadges(i)}</div>
-      <div class="sec">Ortak karar</div>
+      ${spaceOf(i) === "ortak" ? `      <div class="sec">Ortak karar</div>
       <div class="appr">
         <div class="apprwho">${apprOf(i).length ? apprOf(i).map((n) => `<span class="tag ok">✓ ${esc(n)}</span>`).join(" ") : `<span class="hint" style="padding:0">Henüz kimse "istiyorum" demedi.</span>`}</div>
         <button type="button" class="btn ${iApproved(i) ? "" : "buy"}" data-act="appr">${iApproved(i) ? "Onayımı geri çek" : "Ben de istiyorum"}</button>
-      </div>
+      </div>` : ""}
       ${c != null ? `<div class="hint" style="padding:0">En ucuz: ${i.best_url ? `<a href="${esc(safeUrl(i.best_url))}" target="_blank" rel="noopener">${esc(i.best_store || "")}</a>` : esc(i.best_store || "")}${i.last_checked ? " · tarandı " + fmt(i.last_checked) : ""}</div>` : `<div class="hint" style="padding:0">İlk tarama bekleniyor (en geç 2 saat). Üstteki "Fiyatları yenile" ile hemen başlatabilirsin.</div>`}
       ${warn}
       ${candBlock(i)}
@@ -608,6 +657,7 @@
         <label>Kim alacak?<input id="dWho" list="people" value="${esc(i.assignee || "")}"></label>
         <label>Kategori<select id="dCat">${catOptions(catOf(i), true)}</select></label>
       </div>
+      <label>Liste<select id="dList">${listOptions(spaceOf(i))}</select></label>
       <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
       <label>Not<textarea id="dNote" rows="2">${esc(i.note || "")}</textarea></label>
       <button type="button" class="primary" data-act="save">Kaydet</button>
@@ -680,6 +730,7 @@
         priority: $("#dPrio").value,
         assignee: $("#dWho").value.trim() || null,
         category: $("#dCat").value || "Genel",
+        owner: $("#dList").value || null,
         target_price: $("#dTarget").value ? Number($("#dTarget").value) : null,
         note: $("#dNote").value.trim() || null,
       });
@@ -690,8 +741,8 @@
     else if (act === "appr") {
       const it = items.find((x) => x.id === id);
       if (!me()) return alert("Önce adını yaz: sağ üstteki \"Ekleyen\" yazısına dokun.");
-      const cur = apprOf(it);
-      await upd(id, { approvals: iApproved(it) ? cur.filter((n) => lc(n) !== lc(me())) : [...cur, me()] });
+      const had = apprOf(it);
+      await upd(id, { approvals: iApproved(it) ? had.filter((n) => lc(n) !== lc(me())) : [...had, me()] });
       openDetail(id);
     } else if (act === "offers-all" || act === "offers-big") {
       offerMode = act === "offers-big" ? "big" : "all";

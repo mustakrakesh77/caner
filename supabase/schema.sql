@@ -68,3 +68,6 @@ alter table items add column if not exists offers_total int;                    
 alter table items add column if not exists approvals jsonb default '[]'::jsonb;  -- onaylayanların adları
 alter table items add column if not exists updated_at timestamptz;               -- ürünü en son değiştirme zamanı (kullanıcı)
 alter table items add column if not exists updated_by text;                      -- değiştiren kişi
+
+-- ===== v5: wishlist (kişisel listeler) =====
+alter table items add column if not exists owner text;   -- boş = ortak ihtiyaçlar; 'Sıla' / 'Caner' = o kişinin wishlist'i

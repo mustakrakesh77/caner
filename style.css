@@ -297,3 +297,12 @@ body.selmode #fab,.selmode .quick{display:none}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));z-index:60;background:var(--ink);color:var(--bg);display:flex;align-items:center;gap:14px;padding:11px 14px;max-width:calc(100vw - 28px);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .toast[hidden]{display:none}
 .toast button{background:none;border:0;color:var(--bg);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:10.5px;text-decoration:underline;text-underline-offset:3px;padding:0}
+
+/* Liste sekmeleri: İhtiyaçlar / Sıla wishlist / Caner wishlist */
+.spaces{max-width:1080px;margin:0 auto 16px;display:flex;border:1px solid var(--line-strong)}
+.spaces button{flex:1;background:none;border:0;padding:11px 4px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--mute);border-right:1px solid var(--line-strong);white-space:nowrap}
+.spaces button:last-child{border-right:0}
+.spaces button.on{background:var(--ink);color:var(--bg)}
+.spaces small{font:500 11px var(--sans);letter-spacing:0;margin-left:5px;opacity:.75}
+.wtot{font:400 32px/1 var(--serif);letter-spacing:-.01em}
+@media(max-width:380px){.spaces button{font-size:9.5px;letter-spacing:.08em;padding:11px 2px}}
