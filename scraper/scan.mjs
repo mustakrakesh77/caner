@@ -40,6 +40,12 @@ for (const it of items) {
     patch.best_store = p.store;
     patch.best_url = p.url;
     patch.offers = p.offers;
+    if (p.image) patch.image_url = p.image;
+    // Ad linkten otomatik çıkarılmışsa (kullanıcı kendi yazmadıysa) Akakçe'deki gerçek adla değiştir.
+    const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    if (p.title && (norm(it.name) === norm(nameFromUrl(it.source_url || "")) || it.name === "İsimsiz ürün")) {
+      patch.name = p.title;
+    }
 
     await rest("price_history", {
       method: "POST",

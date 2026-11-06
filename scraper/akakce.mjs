@@ -31,7 +31,7 @@ export function parseProduct(html) {
     } catch {
       continue;
     }
-       const types = [].concat(d["@type"] || []);
+    const types = [].concat(d["@type"] || []);
     if (!types.some((t) => t === "Product" || t === "ProductGroup") || !d.offers) continue;
     const o = Array.isArray(d.offers) ? d.offers[0] : d.offers;
     const list = (o.offers || [])
@@ -44,7 +44,13 @@ export function parseProduct(html) {
       .sort((a, b) => a.price - b.price);
     const low = list[0]?.price ?? parseFloat(o.lowPrice);
     if (!Number.isFinite(low)) continue;
+    const img0 = [].concat(d.image || [])[0];
+    const image =
+      (typeof img0 === "string" ? img0 : img0?.contentUrl || img0?.url) ||
+      html.match(/property="og:image" content="([^"]+)"/)?.[1] ||
+      null;
     return {
+      image: /^https:\/\//.test(image || "") ? image : null,
       title: d.name || null,
       price: low,
       store: list[0]?.store || null,

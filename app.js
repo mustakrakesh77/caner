@@ -66,9 +66,12 @@
          <button data-act="ok" data-id="${i.id}">Doğru</button>
          <button data-act="fix" data-id="${i.id}">Yanlış, link gireceğim</button></div>` : "";
     const wait = !i.akakce_url && !i.last_error ? `<div class="meta">İlk tarama bekleniyor (en geç 2 saat)…</div>` : "";
+    const img = i.image_url && /^https:\/\//.test(i.image_url)
+      ? `<img class="thumb" src="${esc(i.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
     return `<div class="card item">
       <div class="top">
-        <div>
+        ${img}
+        <div class="info">
           <h3>${esc(i.name)}</h3>
           <div class="meta">${i.added_by ? esc(i.added_by) + " ekledi · " : ""}${i.target_price ? "hedef " + tl(i.target_price) + " · " : ""}${i.last_checked ? "tarandı " + new Date(i.last_checked).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
         </div>

@@ -29,6 +29,9 @@ create table if not exists price_history (
   checked_at timestamptz default now()
 );
 
+-- Sonradan eklenen sütun (görsel). Eski kurulumda sadece bu satırı çalıştırman yeterli.
+alter table items add column if not exists image_url text;
+
 alter table items enable row level security;
 alter table price_history enable row level security;
 
