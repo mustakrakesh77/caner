@@ -84,8 +84,7 @@
       <label>Adet<input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
     </div>
     <details class="more">
-      <summary>Daha fazla <small>(kim alacak, hedef fiyat, not)</small></summary>
-      <label>Kim alacak?<input id="fWho" list="people" type="text" placeholder="isim"></label>
+      <summary>Daha fazla <small>(hedef fiyat, not)</small></summary>
       <label>Hedef fiyat ₺ <small>(altına inince haber vereyim)</small><input id="fTarget" type="number" min="0" step="1" inputmode="numeric"></label>
       <label>Not<textarea id="fNote" rows="2" placeholder="renk, ölçü, mağaza tercihi…"></textarea></label>
     </details>
@@ -95,7 +94,6 @@
 
 <dialog id="detailDlg"><div id="detail" class="sheet"></div></dialog>
 
-<datalist id="people"></datalist>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <div id="toast" class="toast" hidden><span id="toastMsg"></span><button id="toastBtn" type="button"></button></div>

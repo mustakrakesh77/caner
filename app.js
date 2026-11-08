@@ -11,7 +11,7 @@
   let budget = null;
   let tab = "list";
   let openId = null;
-  const F = { q: "", who: "all", cat: "all", pick: "all", fresh: "all", sort: "cat" };
+  const F = { q: "", cat: "all", pick: "all", fresh: "all", sort: "cat" };
   let offerMode = "all"; // mağaza listesi: "all" | "big"
   try { offerMode = localStorage.getItem("offerMode") === "big" ? "big" : "all"; } catch {}
   let offersOpen = false;
@@ -260,21 +260,17 @@
 
   // ---------- filtre çubuğu ----------
   function renderChips() {
-    const people = [...new Set(cur().map((i) => (i.assignee || "").trim()).filter(Boolean))];
     const chip = (kind, val, label) => `<button type="button" class="chip ${F[kind] === val ? "on" : ""}" data-kind="${kind}" data-val="${esc(val)}">${label}</button>`;
     const open0 = cur().filter((i) => !i.purchased);
     const nPick = open0.filter(needsPick).length, nFresh = open0.filter((i) => freshOf(i)).length;
     if (F.pick === "1" && !nPick) F.pick = "all";
     if (F.fresh === "1" && !nFresh) F.fresh = "all";
-    // Sadece işe yarayanlar görünür: kişi süzgeci (varsa), eşleşme bekleyenler, yeni gelenler. Hiçbiri yoksa satır hiç görünmez.
+    // Sadece işe yarayanlar görünür: eşleşme bekleyenler, yeni gelenler. Hiçbiri yoksa satır hiç görünmez.
     const parts = [];
-    if (people.length) parts.push(chip("who", "all", "Herkes") + people.map((p) => chip("who", p, esc(p))).join(""));
     if (nPick) parts.push(chip("pick", "1", `Eşleşme seç (${nPick})`));
     if (nFresh) parts.push(chip("fresh", "1", `Yeni (${nFresh})`));
     $("#chips").innerHTML = parts.join(`<span class="sep"></span>`);
     fillCategorySelects();
-    const names = new Set([...people, ...items.map((i) => (i.added_by || "").trim()).filter(Boolean), getWho()].filter(Boolean));
-    $("#people").innerHTML = [...names].map((p) => `<option value="${esc(p)}">`).join("");
   }
   $("#chips").onclick = (e) => {
     const b = e.target.closest(".chip");
@@ -292,8 +288,7 @@
     let list = cur().filter((i) => (tab === "bought" ? i.purchased : !i.purchased));
     if (tab === "deals") list = list.filter(isDeal);
     const q = F.q.trim().toLocaleLowerCase("tr");
-    if (q) list = list.filter((i) => [i.name, i.category, i.note, i.assignee].join(" ").toLocaleLowerCase("tr").includes(q));
-    if (F.who !== "all") list = list.filter((i) => (i.assignee || "").trim() === F.who);
+    if (q) list = list.filter((i) => [i.name, i.category, i.note].join(" ").toLocaleLowerCase("tr").includes(q));
     if (F.cat !== "all") list = list.filter((i) => catOf(i) === F.cat);
     if (F.pick === "1") list = list.filter(needsPick);
     if (F.fresh === "1") list = list.filter((i) => freshOf(i));
@@ -328,7 +323,6 @@
     // Etiketler sadece gerektiğinde: uyuşmazlık uyarısı, "kim alacak", not.
     const tags = [
       i.match_warn ? `<span class="tag chk">Uyuşmuyor?</span>` : "",
-      i.assignee ? `<span class="tag who">${esc(i.assignee)}</span>` : "",
       i.note ? `<span class="tag" title="${esc(i.note)}">Not</span>` : "",
     ].filter(Boolean).join("");
     return `<article class="gcard ${i.purchased ? "done" : ""} ${selMode ? "selectable" : ""} ${sel.has(i.id) ? "picked" : ""}" data-id="${i.id}" tabindex="0">
@@ -374,7 +368,7 @@
     space = b.dataset.space;
     try { localStorage.setItem("space", space); } catch {}
     // Başka listeye geçince filtreler, arama ve seçim sıfırlanır
-    Object.assign(F, { q: "", who: "all", cat: "all", pick: "all", fresh: "all" });
+    Object.assign(F, { q: "", cat: "all", pick: "all", fresh: "all" });
     $("#q").value = "";
     if (selMode) setSelMode(false);
     tab = "list";
@@ -403,7 +397,7 @@
     $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""}` : "";
 
     if (!list.length) {
-      const filtered = F.q || F.who !== "all" || F.cat !== "all" || F.pick !== "all" || F.fresh !== "all";
+      const filtered = F.q || F.cat !== "all" || F.pick !== "all" || F.fresh !== "all";
       $("#items").innerHTML = `<div class="empty">${filtered ? "Filtreye uyan ürün yok." : tab === "list" ? (space === "ortak" ? "Liste boş. Sağ alttaki + ile ilk ürünü ekle." : "Wishlist boş. Sağ alttaki + ile ilk isteği ekle.") : tab === "deals" ? "Şu an indirimde ürün yok." : "Henüz bir şey almadınız."}</div>`;
     } else if (F.sort === "cat") {
       const groups = {};
@@ -597,7 +591,6 @@
       match_state: isAk ? "confirmed" : null,
       category: cat,
       quantity: Math.max(1, Number($("#fQty").value) || 1),
-      assignee: $("#fWho").value.trim() || null,
       target_price: $("#fTarget").value ? Number($("#fTarget").value) : null,
       note: $("#fNote").value.trim() || null,
       added_by: getWho() || null,
@@ -688,10 +681,9 @@
         <label>Liste<select id="dList">${listOptions(spaceOf(i))}</select></label>
       </div>
       <div class="row2">
-        <label>Kim alacak?<input id="dWho" list="people" value="${esc(i.assignee || "")}"></label>
         <label>Kategori<select id="dCat">${catOptions(catOf(i), true)}</select></label>
+        <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
       </div>
-      <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
       <label>Not<textarea id="dNote" rows="2">${esc(i.note || "")}</textarea></label>
       <button type="button" class="primary" data-act="save">Kaydet</button>
       <div class="actions">
@@ -760,7 +752,6 @@
       const ok = await upd(id, {
         name: $("#dName").value.trim() || "İsimsiz ürün",
         quantity: Math.max(1, Number($("#dQty").value) || 1),
-        assignee: $("#dWho").value.trim() || null,
         category: $("#dCat").value || "Genel",
         owner: $("#dList").value || null,
         target_price: $("#dTarget").value ? Number($("#dTarget").value) : null,
