@@ -119,6 +119,13 @@ async function scanOne(it) {
       const r = await resolveShortLink(it.source_url);
       if (r && r.name) { ident2 = r.name; patch.source_title = r.name; }
     }
+    // Eskiden "tahmin" olarak seçilmiş eşleşme linkteki ürüne çok benziyorsa artık sormadan onayla.
+    if (it.match_state === "guess" && !it.match_confirmed && ident2 && p.title) {
+      const probe = { title: p.title, url: pageUrl };
+      if (wordScore(ident2, probe) >= 0.8 && coverage(ident2, probe) >= 0.85) {
+        patch.match_confirmed = true; patch.match_state = "verified"; patch.match_note = "Ürün adı eşleşti.";
+      }
+    }
     // match_warn === "" : kullanıcı "Doğru" dedi, bir daha uyarma.
     if (ident2 && p.title && it.match_warn !== "") {
       const probe = { title: p.title, url: pageUrl };

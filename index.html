@@ -27,7 +27,7 @@
       <h1>SC <em>İhtiyaç Listesi</em></h1>
     </div>
     <div class="hero-right">
-      <button id="themeBtn" class="themebtn" type="button" aria-label="Tema seç" title="Tema">◐</button>
+      <button id="themeBtn" class="themebtn" type="button" aria-label="Ayarlar ve tema" title="Ayarlar">◐</button>
       <div class="who">Ekleyen<br><button id="whoBtn" type="button">—</button></div>
       <div id="themeMenu" class="thememenu" hidden></div>
     </div>
@@ -63,13 +63,11 @@
 
   <div class="refreshbar">
     <button id="refreshBtn" type="button">↻ Fiyatları yenile</button>
-    <button id="selBtn" type="button">Seç</button>
     <span id="lastScan"></span>
-    <button id="tokReset" type="button" class="linkbtn" hidden>anahtarı sıfırla</button>
   </div>
 
   <div id="stale" class="notice" hidden></div>
-  <div id="summary" class="summary"></div>
+  <div class="sumrow"><div id="summary" class="summary"></div><button id="selBtn" type="button">Seç</button></div>
   <div id="items"></div>
 </main>
 
@@ -80,19 +78,17 @@
     <div class="sheet-head"><h2>Ürün ekle</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
     <label>Hangi liste<select id="fList"></select></label>
     <label>Ürün linki<input id="fUrl" type="url" placeholder="Trendyol, Hepsiburada, Akakçe… linkini yapıştır" required></label>
-    <label>Ürün adı <small>(boş bırakabilirsin; kısa linklerde ty.gl gibi adı ben bulurum)</small><input id="fName" type="text"></label>
+    <label>Ürün adı <small>(boş bırakabilirsin)</small><input id="fName" type="text"></label>
     <div class="row2">
       <label>Kategori<select id="fCat"></select></label>
       <label>Adet<input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
     </div>
-    <div class="row2">
-      <label>Öncelik
-        <select id="fPrio"><option value="sart">Şart</option><option value="iyi">Olsa iyi olur</option></select>
-      </label>
+    <details class="more">
+      <summary>Daha fazla <small>(kim alacak, hedef fiyat, not)</small></summary>
       <label>Kim alacak?<input id="fWho" list="people" type="text" placeholder="isim"></label>
-    </div>
-    <label>Hedef fiyat ₺ <small>(altına inince haber vereyim)</small><input id="fTarget" type="number" min="0" step="1" inputmode="numeric"></label>
-    <label>Not<textarea id="fNote" rows="2" placeholder="renk, ölçü, mağaza tercihi…"></textarea></label>
+      <label>Hedef fiyat ₺ <small>(altına inince haber vereyim)</small><input id="fTarget" type="number" min="0" step="1" inputmode="numeric"></label>
+      <label>Not<textarea id="fNote" rows="2" placeholder="renk, ölçü, mağaza tercihi…"></textarea></label>
+    </details>
     <button type="submit" class="primary">Listeye ekle</button>
   </form>
 </dialog>

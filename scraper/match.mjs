@@ -128,9 +128,10 @@ export function chooseMatch(userText, cands) {
   }
 
   const [a, b] = ranked;
-  // Birebir aynı başlık (>=0.95) doğrudan kabul; diğerlerinde en az 0.6 ve ikinciden belirgin önde olmalı.
-  if (a && (a.score >= 0.95 || (a.score >= 0.6 && a.cover >= 0.6 && (!b || a.score - b.score >= 0.03)))) {
-    return { action: "use", candidate: a, ranked, verified: false, note: "Ürün adında model kodu yoktu, ad benzerliğiyle seçildi. Kontrol et." };
+  // "Çok eminim" sınırı: ya başlık birebir aynı, ya da güçlü benzerlik + ayırt edici kelimelerin neredeyse hepsi var + ikinciden belirgin önde.
+  // Aksi halde (benzer birden fazla sayfa, farklı model, genel ad) karar kullanıcıya bırakılır; ara "tahmin" yok.
+  if (a && (a.score >= 0.95 || (a.score >= 0.8 && a.cover >= 0.85 && (!b || a.score - b.score >= 0.04)))) {
+    return { action: "use", candidate: a, ranked, verified: true, note: "Ürün adı eşleşti." };
   }
   return { action: "pick", ranked, note: "Net bir eşleşme bulamadım. Doğru ürünü sen seç." };
 }

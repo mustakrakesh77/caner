@@ -315,3 +315,17 @@ body.selmode #fab,.selmode .quick{display:none}
 .qp .qt{min-width:0;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .qp b{font:500 12px var(--serif);white-space:nowrap}
 .gprice[hidden],.gstore[hidden]{display:none}
+
+/* Sadeleştirme */
+.chips:empty{display:none}
+.sumrow{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:4px 0 6px}
+.sumrow .summary{margin:0}
+.more{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:12px}
+.more summary{cursor:pointer;color:var(--accent);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.more summary small{letter-spacing:0;text-transform:none;font-weight:400;color:var(--mute);font-family:var(--serif);font-style:italic;font-size:12px}
+.more[open] summary{margin-bottom:2px}
+.roomsbox{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.roomsbox>summary{cursor:pointer;color:var(--accent);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700}
+.roomsbox>summary small{color:var(--mute);letter-spacing:0;margin-left:4px}
+.roomsbox .rooms{margin-top:10px}
+.thememenu hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
