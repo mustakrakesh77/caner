@@ -30,12 +30,9 @@ Linki telefonda aç → tarayıcı menüsü → **Ana ekrana ekle**. Uygulama gi
 - GitHub zamanlayıcısı bazen birkaç dakika geç çalışır; "tam 2 saat" garantisi yok.
 - Akakçe sayfa yapısını değiştirirse tarama hata verir; kartta kırmızı uyarı görürsün.
 
-## "Fiyatları yenile" butonu için GitHub anahtarı (her telefonda bir kere)
-Buton, GitHub'daki taramayı başlatır. Bunun için sadece bu repoya, sadece "Actions" izni olan bir anahtar lazım:
-1. GitHub'da sağ üst profil → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. Name: `ceyiz-yenile`. Expiration: en uzun süreyi seç.
-3. **Repository access → Only select repositories** → `caner`.
-4. **Permissions → Repository permissions → Actions: Read and write** (başka izin verme).
-5. **Generate token** → çıkan `github_pat_...` ile başlayan anahtarı kopyala (bir daha gösterilmez).
-6. Sitede butona ilk bastığında anahtarı sorar, yapıştır. Anahtar sadece o cihazın tarayıcısında saklanır.
-Anahtar süresi dolarsa buton "geçersiz" uyarısı verir, aynı adımlarla yenisini oluştur. Manitanın telefonunda da aynı anahtarı girebilir ya da kendi GitHub hesabıyla repoya katkıcı olarak eklenip kendi anahtarını alabilir. Anahtarı kimseyle paylaşma, yazıp çizdiğin yerlere yapıştırma.
+## "Yenile" butonu
+Telefonlarda hiçbir anahtar girilmez. Buton Supabase'deki `request_scan()` fonksiyonunu çağırır; o da Vault'ta saklı `gh_token` ile GitHub'daki taramayı başlatır (en çok 45 saniyede bir). Tarama bitince `settings.scan_status` kaydına yazar, uygulama bitişi oradan öğrenir.
+`gh_token` (GitHub fine-grained anahtarı, Actions: Read and write) süresi dolarsa buton "anahtar eksik ya da süresi dolmuş" uyarısı verir; yenisini Supabase → Integrations → Vault'a `gh_token` adıyla kaydetmek yeterli. Her 2 saatte bir otomatik tarama da aynı anahtarla çalışır (`supabase/scheduler.sql`).
+
+## Telefona kur ve paylaşarak ekle
+Linki telefonda aç → tarayıcı menüsü → **Ana ekrana ekle**. Android'de kurulduktan sonra Trendyol/Hepsiburada uygulamasında bir ürünün "Paylaş" menüsünde **SC İhtiyaç** görünür; seçince ekleme formu link dolu açılır. iPhone'da bu özellik yok; onun yerine ekleme formundaki **Yapıştır** düğmesi panodaki linki alır.

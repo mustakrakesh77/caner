@@ -15,8 +15,14 @@
   let offerMode = "all"; // mağaza listesi: "all" | "big"
   try { offerMode = localStorage.getItem("offerMode") === "big" ? "big" : "all"; } catch {}
   let offersOpen = false;
-  let roomsOpen = false; // oda kartları varsayılan kapalı (ilk ekran sade kalsın)
-  try { roomsOpen = localStorage.getItem("rooms") === "1"; } catch {}
+  let budOpen = false; // bütçe ayrıntısı (harcanan/bekleyen + oda kartları) varsayılan kapalı
+  try { budOpen = localStorage.getItem("bud") === "1"; } catch {}
+  let viewMode = "grid"; // "grid" | "list"
+  try { viewMode = localStorage.getItem("view") === "list" ? "list" : "grid"; } catch {}
+  let hist = {};         // ürün -> son fiyatlar (kartlardaki mini eğri için)
+  let scanStatus = null; // tarama durumu (settings.scan_status)
+  let scanning = false, rescan = false;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let selMode = false;
   const sel = new Set();
   // Listeler: "ortak" = İhtiyaçlar; her kişinin kendi wishlist'i. Kişi eklemek/değiştirmek için bu satır yeterli.
@@ -77,8 +83,6 @@
 
   const getWho = () => { try { return localStorage.getItem("who") || ""; } catch { return ""; } };
   const setWho = (v) => { try { localStorage.setItem("who", v); } catch {} };
-  const getTok = () => { try { return localStorage.getItem("ghtok") || ""; } catch { return ""; } };
-  const setTok = (v) => { try { v ? localStorage.setItem("ghtok", v) : localStorage.removeItem("ghtok"); } catch {} };
   function renderWho() { $("#whoBtn").textContent = getWho() || "ismini yaz"; }
 
   // ---------- ortak onay + "yeni" rozeti ----------
@@ -120,18 +124,15 @@
     if (m && bg) m.setAttribute("content", bg);
     renderMenu();
   }
-  // Ayarlar menüsü: temalar + (anahtar kayıtlıysa) GitHub anahtarını sıfırlama
   function renderMenu() {
     const t = getTheme();
-    $("#themeMenu").innerHTML = THEMES.map(([k, l, c]) => `<button type="button" data-t="${k}" class="${k === t ? "on" : ""}"><i style="background:${c}"></i>${l}</button>`).join("")
-      + (getTok() ? `<hr><button type="button" data-t="__tok">GitHub anahtarını sıfırla</button>` : "");
+    $("#themeMenu").innerHTML = THEMES.map(([k, l, c]) => `<button type="button" data-t="${k}" class="${k === t ? "on" : ""}"><i style="background:${c}"></i>${l}</button>`).join("");
   }
   $("#themeBtn").onclick = (e) => { e.stopPropagation(); $("#themeMenu").hidden = !$("#themeMenu").hidden; };
   $("#themeMenu").onclick = (e) => {
     const b = e.target.closest("[data-t]");
     if (!b) return;
     $("#themeMenu").hidden = true;
-    if (b.dataset.t === "__tok") { if (confirm("Kayıtlı GitHub anahtarı bu cihazdan silinsin mi?")) { setTok(""); renderMenu(); } return; }
     applyTheme(b.dataset.t);
   };
   document.addEventListener("click", (e) => { if (!e.target.closest("#themeMenu,#themeBtn")) $("#themeMenu").hidden = true; });
@@ -171,18 +172,29 @@
 
   // ---------- veri ----------
   async function load() {
-    const [a, b] = await Promise.all([
+    const [a, b, h] = await Promise.all([
       db.from("items").select("*").order("created_at", { ascending: false }),
       db.from("settings").select("*"),
+      db.from("price_history").select("item_id,price,checked_at").order("checked_at", { ascending: false }).limit(3000),
     ]);
     if (a.error) { $("#items").innerHTML = `<div class="empty">Liste yüklenemedi: ${esc(a.error.message)}</div>`; return; }
     items = a.data;
     if (!b.error && Array.isArray(b.data)) {
       const row = b.data.find((r) => r.key === "budget");
       budget = row && row.value && row.value.amount != null ? Number(row.value.amount) : null;
+      const st = b.data.find((r) => r.key === "scan_status");
+      scanStatus = st && st.value ? st.value : null;
+    }
+    hist = {};
+    if (!h.error && Array.isArray(h.data)) {
+      for (const r of h.data) { const arr = (hist[r.item_id] ||= []); if (arr.length < 14) arr.push(Number(r.price)); }
+      Object.values(hist).forEach((arr) => arr.reverse()); // eskiden yeniye
     }
     render();
   }
+  // Gerçek zamanlı değişiklikler art arda gelir (tarama ürünleri tek tek yazar): 700 ms içindekileri tek yüklemede birleştir.
+  let loadTimer;
+  const queueLoad = () => { clearTimeout(loadTimer); loadTimer = setTimeout(() => { if (!openId) load(); }, 700); };
 
   const stampPatch = (patch) => ({ ...patch, updated_at: new Date().toISOString(), updated_by: me() || null });
   async function upd(id, patch) {
@@ -192,27 +204,27 @@
     return !error;
   }
 
-  // ---------- bütçe ----------
+  // ---------- bütçe (tek satır; ayrıntı ve oda kartları "Ayrıntı"nın altında) ----------
   function renderBudget() {
+    const box = $("#budget");
     if (space !== "ortak") {
       // Wishlist: bütçe yok; kişinin kaç isteği var, toplamı ne kadar, kaçı alınmış.
       const mine = cur(), want = mine.filter((i) => !i.purchased), got = mine.filter((i) => i.purchased);
-      $("#budget").innerHTML = `<div class="bud-top"><span>${spaceLabelHtml(space)}</span><b class="wtot">${tl(want.reduce((t, i) => t + line(i), 0))}</b></div>
-        <div class="bud-nums" style="margin-top:10px"><span>İstek <b>${want.length}</b></span><span>Alınan <b>${got.length}</b></span>${got.length ? `<span>Alınanların toplamı <b>${tl(got.reduce((t, i) => t + line(i), 0))}</b></span>` : ""}</div>`;
+      box.innerHTML = `<div class="bud-line"><span class="bl">${spaceLabelHtml(space)}</span><b class="wtot">${tl(want.reduce((t, i) => t + line(i), 0))}</b>
+        <span class="bsub">${want.length} istek${got.length ? ` · ${got.length} alınan (${tl(got.reduce((t, i) => t + line(i), 0))})` : ""}</span></div>`;
       return;
     }
     const open = cur().filter((i) => !i.purchased), done = cur().filter((i) => i.purchased);
-    const spent = done.reduce((s, i) => s + line(i), 0);
-    const pend = open.reduce((s, i) => s + line(i), 0);
-    let html = `<div class="bud-top"><span>Bütçe</span><button id="budEdit" type="button">${budget != null ? tl(budget) : "Belirle"} <small>düzenle</small></button></div>`;
-    if (budget != null && budget > 0) {
+    const spent = done.reduce((t, i) => t + line(i), 0);
+    const pend = open.reduce((t, i) => t + line(i), 0);
+    const has = budget != null && budget > 0;
+    const left = has ? budget - spent - pend : 0;
+    let html = `<div class="bud-line"><span class="bl">${has ? (left < 0 ? "Aşım" : "Kalan") : "Bütçe"}</span><b class="wtot ${has && left < 0 ? "neg" : ""}">${has ? tl(Math.abs(left)) : tl(spent + pend)}</b>
+      <button id="budEdit" type="button">${has ? tl(budget) : "Bütçe belirle"} <small>düzenle</small></button></div>`;
+    if (has) {
       const sp = Math.min(100, (spent / budget) * 100);
       const pp = Math.min(100 - sp, (pend / budget) * 100);
-      const left = budget - spent - pend;
-      html += `<div class="bar ${left < 0 ? "over" : ""}" role="img" aria-label="Harcanan ve bekleyen toplam"><i class="spent" style="width:${sp}%"></i><i class="pend" style="width:${pp}%"></i></div>
-        <div class="bud-nums"><span>Harcanan <b>${tl(spent)}</b></span><span>Bekleyen <b>${tl(pend)}</b></span><span class="${left < 0 ? "neg" : ""}">${left < 0 ? "Aşım" : "Kalan"} <b>${tl(Math.abs(left))}</b></span></div>`;
-    } else {
-      html += `<div class="bud-nums" style="margin-top:8px"><span>Harcanan <b>${tl(spent)}</b></span><span>Bekleyen <b>${tl(pend)}</b></span></div>`;
+      html += `<div class="bar ${left < 0 ? "over" : ""}" role="img" aria-label="Harcanan ve bekleyen toplam"><i class="spent" style="width:${sp}%"></i><i class="pend" style="width:${pp}%"></i></div>`;
     }
     // Oda kartları: her kategori için kaç ürün alındı, ne kadar tutuyor. Karta dokununca o kategoriye süzülür.
     const rooms = {};
@@ -222,18 +234,18 @@
       if (i.purchased) { r.done++; r.spent += line(i); } else r.plan += line(i);
     });
     const keys = Object.keys(rooms).sort((x, y) => catOrder(x) - catOrder(y) || x.localeCompare(y, "tr"));
-    if (keys.length) {
-      html += `<details class="roomsbox" ${roomsOpen ? "open" : ""}><summary>Odalara göre <small>${keys.length}</small></summary><div class="rooms">${keys.map((c) => {
-        const r = rooms[c], pct = r.n ? Math.round((r.done / r.n) * 100) : 0;
-        return `<button type="button" class="room ${F.cat === c ? "on" : ""}" data-room="${esc(c)}" aria-label="${esc(catLabel(c))}: ${r.n} üründen ${r.done} alındı">
-          <span class="rname">${esc(catLabel(c))}</span><span class="rcount">${r.done}<small>/${r.n}</small></span>
-          <span class="rbar"><i style="width:${pct}%"></i></span><span class="rmoney">${tl(r.spent + r.plan)}</span></button>`;
-      }).join("")}</div></details>`;
-    }
-    $("#budget").innerHTML = html;
+    const nums = `<div class="bud-nums"><span>Harcanan <b>${tl(spent)}</b></span><span>Bekleyen <b>${tl(pend)}</b></span>${has ? `<span class="${left < 0 ? "neg" : ""}">${left < 0 ? "Aşım" : "Kalan"} <b>${tl(Math.abs(left))}</b></span>` : ""}</div>`;
+    const roomHtml = keys.length ? `<div class="rooms">${keys.map((c) => {
+      const r = rooms[c], pct = r.n ? Math.round((r.done / r.n) * 100) : 0;
+      return `<button type="button" class="room ${F.cat === c ? "on" : ""}" data-room="${esc(c)}" aria-label="${esc(catLabel(c))}: ${r.n} üründen ${r.done} alındı">
+        <span class="rname">${esc(catLabel(c))}</span><span class="rcount">${r.done}<small>/${r.n}</small></span>
+        <span class="rbar"><i style="width:${pct}%"></i></span><span class="rmoney">${tl(r.spent + r.plan)}</span></button>`;
+    }).join("")}</div>` : "";
+    html += `<details class="budmore" ${budOpen ? "open" : ""}><summary>Ayrıntı ve odalar <small>${keys.length}</small></summary>${nums}${roomHtml}</details>`;
+    box.innerHTML = html;
   }
   $("#budget").addEventListener("toggle", (e) => { // "toggle" kabarcıklanmaz: yakalama aşamasında dinle
-    if (e.target.classList && e.target.classList.contains("roomsbox")) { roomsOpen = e.target.open; try { localStorage.setItem("rooms", roomsOpen ? "1" : "0"); } catch {} }
+    if (e.target.classList && e.target.classList.contains("budmore")) { budOpen = e.target.open; try { localStorage.setItem("bud", budOpen ? "1" : "0"); } catch {} }
   }, true);
   $("#budget").onclick = async (e) => {
     const rm = e.target.closest(".room");
@@ -282,6 +294,9 @@
   $("#q").oninput = (e) => { F.q = e.target.value; render(); };
   $("#sort").onchange = (e) => { F.sort = e.target.value; render(); };
   $("#catSel").onchange = (e) => { F.cat = e.target.value; render(); };
+  $("#filterBtn").onclick = () => $("#filterDlg").showModal();
+  $("#filterReset").onclick = () => { F.cat = "all"; F.sort = "cat"; $("#sort").value = "cat"; render(); };
+  $("#viewBtn").onclick = () => { viewMode = viewMode === "list" ? "grid" : "list"; try { localStorage.setItem("view", viewMode); } catch {} render(); };
 
   // ---------- galeri ----------
   function visible() {
@@ -314,8 +329,21 @@
   const imgTag = (i) => i.image_url && /^https:\/\//.test(i.image_url)
     ? `<img src="${esc(i.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
 
+  // Kartlardaki mini fiyat eğrisi: son taramalardaki fiyatlar (en az 3 nokta ve gerçek bir değişim varsa).
+  function spark(i) {
+    const h = hist[i.id];
+    if (!h || h.length < 3) return "";
+    const lo = Math.min(...h), hi = Math.max(...h);
+    if (hi - lo < 0.5) return "";
+    const W = 46, H = 16;
+    const pts = h.map((v, k) => `${((k / (h.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - lo) / (hi - lo)) * (H - 4)).toFixed(1)}`).join(" ");
+    const dir = h[h.length - 1] < h[0] ? "down" : h[h.length - 1] > h[0] ? "up" : "flat";
+    return `<svg class="spark ${dir}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Fiyat eğilimi"><title>Son ${h.length} taramada ${tl(h[0])} → ${tl(h[h.length - 1])}</title><polyline points="${pts}"/></svg>`;
+  }
+
   function gcard(i) {
     const c = unit(i), p = num(i.prev_price), q = qty(i);
+    const pending = !i.purchased && c == null && !needsPick(i) && !i.last_error; // eklendi, fiyatı henüz aranıyor
     const cands = Array.isArray(i.candidates) ? i.candidates : [];
     // Eşleşme seçimi bekleyen ürün: adaylar kartın üzerinde, tek dokunuşla seçilir.
     const quick = needsPick(i) && cands.length
@@ -333,9 +361,12 @@
       </div>
       <div class="gbody">
         <div class="gname">${esc(i.name)}</div>
+        <div class="inl">${overlayBadges(i)}</div>
         ${quick}
-        <div class="gprice" ${quick ? "hidden" : ""}><b>${needsPick(i) ? "Eşleşme seç" : c != null ? tl(c) : "…"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}</div>
-        <div class="gstore" ${quick ? "hidden" : ""}>${needsPick(i) ? "doğru ürünü seç" : c != null ? esc(i.best_store || "") : "ilk tarama bekleniyor"}</div>
+        ${pending
+          ? `<div class="gprice pend"><i></i><span>Fiyat aranıyor…</span></div>`
+          : `<div class="gprice" ${quick ? "hidden" : ""}><b>${needsPick(i) ? "Eşleşme seç" : c != null ? tl(c) : "—"}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 ? `<em>× ${q}</em>` : ""}${spark(i)}</div>
+        <div class="gstore" ${quick ? "hidden" : ""}>${needsPick(i) ? "doğru ürünü seç" : c != null ? esc(i.best_store || "") : i.last_error ? "fiyat alınamadı, tekrar denenecek" : ""}</div>`}
         ${tags ? `<div class="tags">${tags}</div>` : ""}
       </div>
     </article>`;
@@ -359,7 +390,9 @@
   function renderSpaces() {
     $("#spaces").innerHTML = SPACES.map((sp) => {
       const n = items.filter((i) => spaceOf(i) === sp && !i.purchased).length;
-      return `<button type="button" data-space="${esc(sp)}" class="${sp === space ? "on" : ""}">${spaceLabelHtml(sp)}<small>${n}</small></button>`;
+      const l1 = sp === "ortak" ? "İhtiyaçlar" : sp;
+      const l2 = sp === "ortak" ? `${n} ürün` : `<span lang="en">wishlist</span> ${n}`;
+      return `<button type="button" data-space="${esc(sp)}" class="${sp === space ? "on" : ""}" aria-label="${esc(spaceLabel(sp))}, ${n} ürün"><span class="n1">${esc(l1)}</span><span class="n2">${l2}</span></button>`;
     }).join("");
   }
   $("#spaces").onclick = (e) => {
@@ -385,8 +418,8 @@
     $("#cList").textContent = open.length;
     $("#cDeals").textContent = open.filter(isDeal).length;
     $("#cBought").textContent = cur().filter((i) => i.purchased).length;
-    const last = items.map((i) => i.last_checked).filter(Boolean).sort().pop();
-    $("#lastScan").textContent = last ? "Son tarama: " + fmt(last) : "Henüz taranmadı";
+    const last = (scanStatus && scanStatus.finished_at) || items.map((i) => i.last_checked).filter(Boolean).sort().pop();
+    const shortWhen = (d) => { const t = new Date(d), n = new Date(); return t.toDateString() === n.toDateString() ? t.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : t.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }); };
     const hrs = last ? (Date.now() - new Date(last).getTime()) / 3600000 : 0;
     const stale = $("#stale");
     stale.hidden = !(open.length && last && hrs > 5);
@@ -394,7 +427,12 @@
 
     const list = visible();
     const total = list.reduce((s, i) => s + line(i), 0);
-    $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""}` : "";
+    $("#summary").textContent = list.length ? `${list.length} ürün · ${tab === "bought" ? "harcanan" : "toplam"} ${tl(total)}${list.some((i) => qty(i) > 1) ? " (adetler dahil)" : ""} · ${last ? "tarandı " + shortWhen(last) : "henüz taranmadı"}` : "";
+    $("#items").classList.toggle("listview", viewMode === "list");
+    $("#viewBtn").textContent = viewMode === "list" ? "▦" : "☰"; $("#viewBtn").title = $("#viewBtn").ariaLabel = viewMode === "list" ? "Izgara görünümüne geç" : "Liste görünümüne geç";
+    const nf = (F.cat !== "all" ? 1 : 0) + (F.sort !== "cat" ? 1 : 0);
+    $("#filterCount").hidden = !nf; $("#filterCount").textContent = nf;
+    $("#filterBtn").classList.toggle("on", nf > 0);
 
     if (!list.length) {
       const filtered = F.q || F.cat !== "all" || F.pick !== "all" || F.fresh !== "all";
@@ -453,14 +491,14 @@
       current_price: typeof c.price === "number" ? c.price : null, prev_price: null, lowest_price: null, highest_price: null, offers: [], offers_total: null, image_url: c.image || null };
     if (!it.name || it.name === nameFromUrl(it.source_url || "") || it.name === "İsimsiz ürün") patch.name = c.title; // adı kullanıcı yazmadıysa gerçek ürün adını al
     const ok = await upd(id, patch);
-    if (ok) { if (getTok()) $("#refreshBtn").click(); else toast("Seçildi. Mağaza fiyatları taramada gelir, hemen görmek için \"Fiyatları yenile\"ye bas."); }
+    if (ok) scheduleScan("Seçildi. Mağaza fiyatları birazdan gelir.", 1500);
     return ok;
   }
   async function requestResearch(id) {
     if (!confirm("Akakçe'de yeniden aranacak. Yeni bir ürün seçene kadar fiyat güncellenmez. Devam edilsin mi?")) return;
     const ok = await upd(id, { match_state: "pick", akakce_url: null, match_confirmed: false, candidates: [], match_note: null, match_warn: null });
     if (openId) detailDlg.close();
-    if (ok) { if (getTok()) $("#refreshBtn").click(); else toast("Adaylar bir sonraki taramada gelecek."); }
+    if (ok) scheduleScan("Adaylar aranıyor, birazdan gelir.", 1500);
   }
 
   // "Aldık" / "Geri al": yanlışlıkla basılırsa 6 saniye boyunca geri alınabilir.
@@ -572,8 +610,34 @@
 
   // ---------- ürün ekleme ----------
   const addDlg = $("#addDlg"), detailDlg = $("#detailDlg");
-  $("#fab").onclick = () => { $("#fList").innerHTML = listOptions(space); renderChips(); addDlg.showModal(); $("#fUrl").focus(); };
-  [addDlg, detailDlg].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d || e.target.closest("[data-close]")) d.close(); }));
+  const filterDlg = $("#filterDlg");
+  // Panodaki link: izin zaten verilmişse açılışta kendiliğinden doldurulur; yoksa "Yapıştır" düğmesi (dokunuşla) okur.
+  async function tryClipboard(auto) {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) return "";
+      if (auto) {
+        if (!navigator.permissions) return "";
+        const st = await navigator.permissions.query({ name: "clipboard-read" });
+        if (st.state !== "granted") return "";
+      }
+      const m = String((await navigator.clipboard.readText()) || "").match(/https?:\/\/[^\s]+/i);
+      return m ? m[0] : "";
+    } catch { return ""; }
+  }
+  async function openAdd(prefill) {
+    $("#fList").innerHTML = listOptions(space);
+    renderChips();
+    addDlg.showModal();
+    $("#fUrl").focus();
+    const url = prefill || (await tryClipboard(true));
+    if (url && !$("#fUrl").value) $("#fUrl").value = url;
+  }
+  $("#fab").onclick = () => openAdd();
+  $("#pasteBtn").onclick = async () => {
+    const u = await tryClipboard(false);
+    if (u) $("#fUrl").value = u; else toast("Panoda link bulamadım. Linki kopyalayıp tekrar dene.");
+  };
+  [addDlg, detailDlg, filterDlg].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d || e.target.closest("[data-close]")) d.close(); }));
   detailDlg.addEventListener("close", () => { openId = null; });
 
   $("#addForm").onsubmit = async (e) => {
@@ -603,7 +667,7 @@
     $("#fQty").value = 1;
     addDlg.close();
     await load();
-    scheduleScan();
+    scheduleScan("Eklendi. Ürünün adı ve fiyatı birazdan gelir.", 8000);
   };
 
   // ---------- ürün detayı ----------
@@ -659,6 +723,11 @@
     const warn = i.akakce_url && !i.match_confirmed && !i.purchased
       ? `<div class="warn">${esc(i.match_note || "Bu eşleşme doğru mu?")} <a href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe sayfasına bak</a>
          <button type="button" class="btn" data-act="ok">Doğru</button><button type="button" class="btn" data-act="more-cands">Başka aday</button><button type="button" class="btn" data-act="fix">Yanlış, link gireceğim</button></div>` : "";
+    const goUrl = i.best_url || i.akakce_url || i.source_url;
+    const storeName = i.best_store ? String(i.best_store).replace("/", " · ") : "";
+    // Tek dokunuşla en ucuz mağazaya git
+    const cta = c != null && goUrl && !i.purchased
+      ? `<a class="go" href="${esc(safeUrl(goUrl))}" target="_blank" rel="noopener"><span class="gs">${esc(storeName || "Mağazaya git")}</span><b>${tl(c)}</b><i>Git →</i></a>` : "";
     $("#detail").innerHTML = `
       <div class="sheet-head"><h2>Ürün detayı</h2><button type="button" class="x" data-close aria-label="Kapat">✕</button></div>
       <div class="d-img"><span class="ph">${esc(mono(i))}</span>${imgTag(i)}</div>
@@ -666,31 +735,35 @@
       ${i.source_title ? `<div class="hint" style="padding:0">Linkindeki ürün: <b>${esc(i.source_title)}</b></div>` : ""}
       <div class="d-price"><b>${tl(c)}</b>${p != null && c != null && c < p ? `<s>${tl(p)}</s>` : ""}${q > 1 && c != null ? `<span>× ${q} = <b style="font-size:18px">${tl(c * q)}</b></span>` : ""}</div>
       <div class="d-badges">${overlayBadges(i, 9)}</div>
-
-      ${c != null ? `<div class="hint" style="padding:0">En ucuz: ${i.best_url ? `<a href="${esc(safeUrl(i.best_url))}" target="_blank" rel="noopener">${esc(i.best_store || "")}</a>` : esc(i.best_store || "")}${i.last_checked ? " · tarandı " + fmt(i.last_checked) : ""}</div>` : `<div class="hint" style="padding:0">İlk tarama bekleniyor (en geç 2 saat). Üstteki "Fiyatları yenile" ile hemen başlatabilirsin.</div>`}
+      <div class="ctaRow">${cta}${i.purchased ? `<button type="button" class="btn" data-act="undo">↩ Geri al</button>` : `<button type="button" class="btn buy" data-act="buy">✓ Aldık</button>`}</div>
+      ${c != null ? (i.last_checked ? `<div class="hint" style="padding:0">Tarandı ${fmt(i.last_checked)}</div>` : "") : `<div class="hint" style="padding:0">Fiyat aranıyor… birkaç saniye içinde gelir. Gelmezse üstteki "↻ Yenile"ye bas.</div>`}
       ${warn}
       ${i.match_warn && !i.purchased ? `<div class="warn">${esc(i.match_warn)} <button type="button" class="btn" data-act="okwarn">Doğru, böyle kalsın</button><button type="button" class="btn" data-act="more-cands">Başka ürün seç</button><button type="button" class="btn" data-act="research">Yeniden ara</button></div>` : ""}
       ${candBlock(i)}
       ${i.last_error ? `<div class="err">⚠ ${esc(i.last_error)}</div>` : ""}
-      <div id="offersBox">${offersBlock(i)}</div>
-      <div class="sec">Fiyat geçmişi</div>
-      <div id="chart" class="chart"><div class="hint">Yükleniyor…</div></div>
-      <div class="sec">Düzenle</div>
-      <div class="row2">
-        <label>Adet<input id="dQty" type="number" min="1" step="1" value="${q}" inputmode="numeric"></label>
-        <label>Liste<select id="dList">${listOptions(spaceOf(i))}</select></label>
+      <div class="dtabs" role="tablist">
+        <button type="button" role="tab" data-dtab="prices" class="on">Fiyatlar</button>
+        <button type="button" role="tab" data-dtab="hist">Geçmiş</button>
+        <button type="button" role="tab" data-dtab="edit">Düzenle</button>
       </div>
-      <div class="row2">
-        <label>Kategori<select id="dCat">${catOptions(catOf(i), true)}</select></label>
-        <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
-      </div>
-      <label>Not<textarea id="dNote" rows="2">${esc(i.note || "")}</textarea></label>
-      <button type="button" class="primary" data-act="save">Kaydet</button>
-      <div class="actions">
-        ${i.purchased ? `<button type="button" class="btn" data-act="undo">↩ Geri al</button>` : `<button type="button" class="btn buy" data-act="buy">✓ Aldık</button>`}
-        ${i.source_url ? `<a class="btn" href="${esc(safeUrl(i.source_url))}" target="_blank" rel="noopener">Orijinal link</a>` : ""}
-        ${i.akakce_url ? `<a class="btn" href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe</a>` : ""}
-        <button type="button" class="btn danger" data-act="del">Sil</button>
+      <div class="dpanel" data-panel="prices"><div id="offersBox">${offersBlock(i) || `<div class="hint">Mağaza fiyatları ilk taramadan sonra burada görünür.</div>`}</div></div>
+      <div class="dpanel" data-panel="hist" hidden><div id="chart" class="chart"><div class="hint">Yükleniyor…</div></div></div>
+      <div class="dpanel" data-panel="edit" hidden>
+        <div class="row2">
+          <label>Adet<input id="dQty" type="number" min="1" step="1" value="${q}" inputmode="numeric"></label>
+          <label>Liste<select id="dList">${listOptions(spaceOf(i))}</select></label>
+        </div>
+        <div class="row2">
+          <label>Kategori<select id="dCat">${catOptions(catOf(i), true)}</select></label>
+          <label>Hedef fiyat ₺<input id="dTarget" type="number" min="0" step="1" inputmode="numeric" value="${i.target_price ?? ""}"></label>
+        </div>
+        <label>Not<textarea id="dNote" rows="2">${esc(i.note || "")}</textarea></label>
+        <button type="button" class="primary" data-act="save">Kaydet</button>
+        <div class="actions">
+          ${i.source_url ? `<a class="btn" href="${esc(safeUrl(i.source_url))}" target="_blank" rel="noopener">Orijinal link</a>` : ""}
+          ${i.akakce_url ? `<a class="btn" href="${esc(safeUrl(i.akakce_url))}" target="_blank" rel="noopener">Akakçe</a>` : ""}
+          <button type="button" class="btn danger" data-act="del">Sil</button>
+        </div>
       </div>`;
     detailDlg.showModal();
     loadHistory(id);
@@ -745,6 +818,12 @@
   }
 
   $("#detail").onclick = async (e) => {
+    const tb = e.target.closest("[data-dtab]");
+    if (tb) { // sekme değiştir
+      document.querySelectorAll("#detail [data-dtab]").forEach((x) => x.classList.toggle("on", x === tb));
+      document.querySelectorAll("#detail .dpanel").forEach((pn) => (pn.hidden = pn.dataset.panel !== tb.dataset.dtab));
+      return;
+    }
     const b = e.target.closest("[data-act]");
     if (!b || !openId) return;
     const id = openId, act = b.dataset.act;
@@ -788,80 +867,75 @@
     }
   };
 
-  // Ürün ekleyince (anahtar kayıtlıysa) taramayı kendiliğinden başlat; peş peşe eklemelerde son eklemeden 12 sn sonra bir kere.
-  let scanTimer;
-  function scheduleScan() {
-    if (!getTok() || !repoInfo()) return;
-    toast("Eklendi. Ürünün adı ve fiyatı birkaç saniye içinde gelir.");
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => { const b = $("#refreshBtn"); if (!b.disabled) b.click(); }, 12000);
+  // ---------- fiyatları yenile ----------
+  // Telefon GitHub'a değil Supabase'e "taramayı başlat" der (anahtar Supabase'de saklı, cihazda yok).
+  // Bitişi tahminle değil, taramanın yazdığı durumdan (settings.scan_status) öğrenir.
+  function setScanUi(on, label) {
+    const b = $("#refreshBtn");
+    b.disabled = on;
+    b.textContent = on ? label : "↻ Yenile";
+    $("#scanbar").hidden = !on;
   }
-
-  // ---------- manuel fiyat yenileme (GitHub Actions taramasını başlatır) ----------
-  const lastCheck = () => items.map((i) => i.last_checked).filter(Boolean).sort().pop() || "";
-  function repoInfo() {
-    const m = location.hostname.match(/^(.+)\.github\.io$/);
-    const repo = location.pathname.split("/").filter(Boolean)[0];
-    return m && repo ? { owner: m[1], repo } : null;
+  async function finishScan(v) {
+    scanning = false;
+    setScanUi(false);
+    await load();
+    if (!v) toast("Tarama beklenenden uzun sürdü. Birazdan sayfayı yenile.");
+    else if (v.error) toast("Tarama hata verdi: " + v.error);
+    else toast(`Fiyatlar güncellendi${v.ask ? ` · ${v.ask} ürün seçim bekliyor` : ""}`);
+    if (rescan) { rescan = false; scheduleScan(null, 500); } // tarama sürerken eklenenler için bir tur daha
   }
-  const showTokBtn = () => renderMenu(); // anahtar kaydedilince/silinince ayarlar menüsü güncellensin
-
-  $("#refreshBtn").onclick = async () => {
-    const btn = $("#refreshBtn");
-    const info = repoInfo();
-    if (!info) return alert("Yenileme sadece yayınlanmış github.io adresinde çalışır.");
-    let tok = getTok();
-    if (!tok) {
-      tok = (prompt("İlk kullanımda GitHub izin anahtarı gerekiyor (bu cihazda saklanır, bir kere girilir).\nNasıl alınacağı README.md'de yazıyor.\n\nAnahtarı yapıştır:") || "").trim();
-      if (!tok) return;
-      setTok(tok); showTokBtn();
+  async function requestScan() {
+    if (scanning) { rescan = true; return; }
+    scanning = true;
+    setScanUi(true, "Başlatılıyor…");
+    let since = Date.now() - 3000;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res;
+      try { res = await db.rpc("request_scan"); } catch (e) { res = { error: e }; }
+      if (res.error) { scanning = false; setScanUi(false); return alert("Tarama istenemedi: " + (res.error.message || res.error)); }
+      const d = res.data || {};
+      if (d.reason === "no_token") { scanning = false; setScanUi(false); return alert("Tarama başlatılamadı: Supabase'deki GitHub anahtarı eksik ya da süresi dolmuş. Bana yaz, yenileyeyim."); }
+      if (d.ok) { if (d.at) since = Date.parse(d.at) - 1000; break; } // sunucu saatiyle karşılaştır: telefon saati yanlış olsa da çalışır
+      if (d.reason === "too_soon") { // en çok 45 sn önce başka bir tarama istenmiş: sınır dolunca yeniden iste, böylece son eklenenler de taranır
+        for (let sec = Math.max(1, Number(d.wait) || 45); sec > 0; sec--) { setScanUi(true, `Sırada… ${sec} sn`); await sleep(1000); }
+        continue;
+      }
+      break;
     }
-    btn.disabled = true; btn.textContent = "Başlatılıyor…";
-    const before = lastCheck();
-    let r;
-    try {
-      r = await fetch(`https://api.github.com/repos/${info.owner}/${info.repo}/actions/workflows/scan.yml/dispatches`, {
-        method: "POST",
-        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${tok}`, "X-GitHub-Api-Version": "2022-11-28" },
-        body: JSON.stringify({ ref: "main" }),
-      });
-    } catch (e) {
-      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
-      return alert("GitHub'a ulaşılamadı. İnternetini kontrol et.");
-    }
-    if (r.status !== 204) {
-      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
-      if ([401, 403, 404].includes(r.status)) { setTok(""); showTokBtn(); return alert("GitHub anahtarı geçersiz ya da izni yok (kod " + r.status + "). Anahtarı README'deki gibi yeniden oluşturup tekrar dene."); }
-      return alert("Tarama başlatılamadı (kod " + r.status + ").");
-    }
-    // Bitişi tahminle değil GitHub'dan öğren: 3 saniyede bir çalışmanın gerçek durumuna bakar.
     const t0 = Date.now();
-    const api = `https://api.github.com/repos/${info.owner}/${info.repo}/actions/workflows/scan.yml/runs?event=workflow_dispatch&per_page=5`;
-    const hdr = { Accept: "application/vnd.github+json", Authorization: `Bearer ${tok}`, "X-GitHub-Api-Version": "2022-11-28" };
-    const finish = async (msg) => {
-      btn.disabled = false; btn.textContent = "↻ Fiyatları yenile";
-      await load();
-      if (msg) alert(msg);
-    };
-    const tick = async () => {
+    for (;;) {
       const sec = Math.round((Date.now() - t0) / 1000);
-      try {
-        const rr = await fetch(api, { headers: hdr });
-        if (rr.ok) {
-          const runs = (await rr.json()).workflow_runs || [];
-          const run = runs.find((x) => new Date(x.created_at).getTime() >= t0 - 20000);
-          if (run && run.status === "completed") return finish(run.conclusion === "success" ? "" : "Tarama hata verdi. GitHub'da Actions sekmesindeki kaydı kontrol et.");
-          btn.textContent = run ? `Taranıyor… ${sec} sn` : `Başlatılıyor… ${sec} sn`;
-        }
-      } catch (e) { /* geçici ağ hatası: tekrar dene */ }
-      if (sec > 300) return finish("Tarama beklenenden uzun sürdü. Birkaç dakika sonra sayfayı yenile.");
+      const { data } = await db.from("settings").select("*");
+      const v = ((data || []).find((r) => r.key === "scan_status") || {}).value;
+      if (v && v.state === "done" && Date.parse(v.finished_at) >= since) return finishScan(v);
+      setScanUi(true, v && v.state === "running" && Date.parse(v.started_at) >= since ? `Taranıyor… ${sec} sn` : `Başlatılıyor… ${sec} sn`);
+      if (sec > 300) return finishScan(null);
       if (sec % 9 < 3) load(); // ürünler güncellendikçe ekrana gelsin
-      setTimeout(tick, 3000);
-    };
-    tick();
-  };
+      await sleep(3000);
+    }
+  }
+  $("#refreshBtn").onclick = () => requestScan();
+  // Ürün ekleyince / eşleşme seçince taramayı kendiliğinden başlat; peş peşe işlemlerde son işlemden sonra bir kere.
+  let scanTimer;
+  function scheduleScan(msg, delay = 8000) {
+    if (msg) toast(msg);
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(requestScan, delay);
+  }
 
-  db.channel("items").on("postgres_changes", { event: "*", schema: "public", table: "items" }, () => { if (!openId) load(); }).subscribe();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !openId) load(); });
-  load();
+  db.channel("items").on("postgres_changes", { event: "*", schema: "public", table: "items" }, queueLoad).subscribe();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) queueLoad(); });
+
+  // Android "Paylaş → SC İhtiyaç" (ve ?url= ile gelen link): ekleme formu açılıp doldurulur.
+  let shareUrl = "";
+  try {
+    const q = new URLSearchParams(location.search);
+    const m = (q.get("url") || q.get("text") || q.get("title") || "").match(/https?:\/\/[^\s]+/i);
+    if (m) { shareUrl = m[0]; history.replaceState(null, "", location.pathname); }
+  } catch { /* adres okunamadı */ }
+  load().then(() => { if (shareUrl) openAdd(shareUrl); });
+
+  // Servis çalışanı: yüklenebilir uygulama + paylaşarak ekleme için. Önce ağ, olmazsa önbellek.
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

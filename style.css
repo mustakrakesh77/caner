@@ -329,3 +329,113 @@ body.selmode #fab,.selmode .quick{display:none}
 .roomsbox>summary small{color:var(--mute);letter-spacing:0;margin-left:4px}
 .roomsbox .rooms{margin-top:10px}
 .thememenu hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+
+/* ===== v9: kompakt düzen — ürünler ilk ekranda görünsün ===== */
+body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+.hero{padding-bottom:0}
+.hero-top{margin-bottom:10px;padding-bottom:10px}
+h1{font-size:clamp(22px,6.2vw,30px)}
+.eyebrow{margin-bottom:2px}
+/* bütçe: tek satır, ayrıntı katlanır */
+.bud{margin:10px auto 0;padding:10px 14px}
+.bud-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.bud-line .bl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--mute)}
+.bud-line .wtot{font:400 26px/1 var(--serif);letter-spacing:-.01em}
+.bud-line .wtot.neg{color:var(--rust)}
+.bud-line .bsub{font-size:12px;color:var(--mute);margin-left:auto}
+.bud-line #budEdit{margin-left:auto;background:none;border:0;padding:0;font:500 12px var(--sans);color:var(--ink);letter-spacing:.03em}
+.bud-line #budEdit small{font:700 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-left:6px;text-decoration:underline;text-underline-offset:3px}
+.bud .bar{margin:8px 0 6px}
+.budmore{margin-top:4px;border-top:1px solid var(--line);padding-top:6px}
+.budmore>summary{cursor:pointer;color:var(--accent);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.budmore>summary small{color:var(--mute);letter-spacing:0;margin-left:4px}
+.budmore .bud-nums{margin-top:8px}
+.budmore .rooms{margin:10px 0 2px}
+/* fırsat şeridi daha ince */
+.dealstrip{margin:0 0 6px}
+.strip-title{font:italic 400 16px var(--serif);margin:0 0 6px}
+.dcard{width:210px;padding:6px;gap:8px}
+.dthumb{width:42px;height:42px}
+.dthumb b{font-size:20px}
+.dname{font-size:12.5px}
+.dprice{font-size:14px}
+/* arama satırı yukarıda yapışık kalır */
+.toolbar{position:sticky;top:0;z-index:12;display:flex;gap:10px;align-items:center;background:var(--bg);padding:8px 0;margin-top:0}
+.toolbar #q{flex:1;min-width:0}
+.fbtn{flex:none;background:none;border:1px solid var(--line-strong);padding:9px 14px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--ink)}
+.fbtn small{font:700 10px var(--sans);margin-left:4px;color:var(--accent)}
+.fbtn.on{background:var(--ink);color:var(--bg)}
+.fbtn.on small{color:var(--bg)}
+.chips{padding:4px 0 0}
+.tabs{margin:8px 0 8px}
+/* özet satırı: yenile / görünüm / seç */
+.sumrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:2px 0 8px}
+.sumrow .summary{margin:0;font-size:13px;flex:1 1 150px;min-width:0}
+.sumbtns{display:flex;gap:14px;flex:none;align-items:center}
+.sumbtns button{background:none;border:0;border-bottom:1px solid var(--line-strong);padding:3px 0;font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--ink);white-space:nowrap}
+.sumbtns #viewBtn{font-size:14px;letter-spacing:0;border-bottom-color:transparent;padding:0 2px;line-height:1}
+.sumbtns #selBtn{color:var(--accent);border-bottom-color:var(--accent)}
+.sumbtns button:disabled{opacity:.6;cursor:default}
+/* alt gezinme: üç liste + ekle */
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line-strong);display:flex;align-items:stretch;padding:0 max(8px,calc((100% - 1080px)/2)) env(safe-area-inset-bottom)}
+.bottomnav .spaces{flex:1;display:flex;border:0;margin:0;max-width:none}
+.spaces button{flex:1;background:none;border:0;border-right:0;padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--mute);letter-spacing:0;text-transform:none;font-weight:400;white-space:normal;min-width:0}
+.spaces button .n1{font:500 15px/1.1 var(--serif);color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.spaces button .n2{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.spaces button.on{background:none;color:var(--ink);box-shadow:inset 0 2px 0 var(--accent)}
+.spaces button.on .n1{font-weight:600}
+#fab{position:static;flex:none;align-self:center;width:50px;height:50px;margin:0 2px 0 8px;font-size:30px;box-shadow:0 4px 12px rgba(42,36,32,.3)}
+body.selmode .bottomnav{display:none}
+.toast{bottom:calc(98px + env(safe-area-inset-bottom))}
+/* tarama göstergesi */
+.scanbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:70;background:linear-gradient(90deg,transparent,var(--accent),transparent) no-repeat;background-size:40% 100%;animation:scansweep 1.1s linear infinite}
+.scanbar[hidden]{display:none}
+@keyframes scansweep{from{background-position:-40% 0}to{background-position:140% 0}}
+.gprice.pend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mute);letter-spacing:.04em;min-height:30px}
+.gprice.pend i{width:9px;height:9px;border-radius:50%;background:var(--accent);animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@media (prefers-reduced-motion:reduce){.gprice.pend i,.scanbar{animation:none}}
+/* kartlardaki mini fiyat eğrisi */
+.spark{margin-left:auto;flex:none}
+.spark polyline{fill:none;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.spark.down polyline{stroke:var(--sage)}
+.spark.up polyline{stroke:var(--rust)}
+.spark.flat polyline{stroke:var(--mute)}
+/* liste görünümü: ürün başına tek satır */
+.inl{display:none}
+.listview .grid{grid-template-columns:1fr;gap:8px}
+.listview .gcard{flex-direction:row;align-items:center;gap:12px;padding:6px 10px 6px 6px}
+.listview .imgwrap{width:66px;aspect-ratio:1;flex:none;overflow:visible}
+.listview .imgwrap img{padding:5px}
+.listview .ph{font-size:28px}
+.listview .ov{display:none}
+.listview .quick{width:26px;height:26px;right:-6px;bottom:-6px;font-size:13px}
+.listview .gbody{flex:1;min-width:0;padding:0}
+.listview .gname{min-height:0;font-size:14px}
+.listview .inl{display:flex;gap:4px;flex-wrap:wrap}
+.listview .gprice b{font-size:17px}
+.listview .tags{border-top:0;margin-top:0;padding-top:0}
+/* detay: tek dokunuşla satın al + sekmeler */
+.d-img{aspect-ratio:16/9}
+.ctaRow{display:flex;gap:8px;align-items:stretch}
+.go{flex:1;display:flex;align-items:center;gap:10px;background:var(--accent);color:var(--on-accent);text-decoration:none;padding:11px 12px;min-width:0}
+.go .gs{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.go b{font:500 18px var(--serif);white-space:nowrap}
+.go i{font-style:normal;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;white-space:nowrap;opacity:.92}
+.ctaRow .btn{white-space:nowrap;display:flex;align-items:center}
+.dtabs{display:flex;border-bottom:1px solid var(--line);margin-top:2px}
+.dtabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:10px 4px;font:400 16px var(--serif);color:var(--mute)}
+.dtabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
+.dpanel{display:grid;gap:12px}
+.dpanel[hidden]{display:none}
+/* ekleme formu: link + yapıştır */
+.urlrow{display:flex;gap:8px;align-items:stretch}
+.urlrow input{flex:1;min-width:0}
+.urlrow .btn{flex:none}
+
+/* bütçe satırı tek satıra sığsın */
+.bud-line{flex-wrap:nowrap}
+.bud-line .wtot{font-size:24px;white-space:nowrap}
+.bud-line #budEdit{white-space:nowrap;font-size:12px}
+.bud-line #budEdit small{margin-left:4px;font-size:9.5px;letter-spacing:.1em}
+.bud-line .bl{letter-spacing:.14em}

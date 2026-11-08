@@ -22,6 +22,16 @@ const unassigned = (it) => !it.category || it.category === "Genel";
 const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 const OPTIONAL = ["image_url", "lowest_price", "highest_price", "candidates", "match_state", "match_note", "offers_total", "source_title", "match_warn"];
 
+// Tarama durumu: telefonlar "yenile"ye basınca bittiğini buradan öğrenir (settings tablosu, key=scan_status).
+const setStatus = async (value) => {
+  try {
+    await rest("settings?on_conflict=key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ key: "scan_status", value }) });
+  } catch { /* durum yazılamazsa tarama yine de devam eder */ }
+};
+const startedAt = Date.now();
+await setStatus({ state: "running", started_at: new Date().toISOString() });
+
+async function run() {
 const res = await rest("items?purchased=eq.false&select=*");
 if (!res.ok) throw new Error("Liste okunamadı: " + (await res.text()));
 const items = await res.json();
@@ -173,3 +183,15 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
 console.log(`Bitti: ${ok} başarılı, ${fail} hatalı, ${ask} seçim bekliyor, ${Math.round((Date.now() - t0) / 1000)} sn`);
+  return { ok, fail, ask };
+}
+
+let result = {}, error = null;
+try {
+  result = await run();
+} catch (e) {
+  error = String(e.message || e).slice(0, 200);
+  throw e;
+} finally {
+  await setStatus({ state: "done", finished_at: new Date().toISOString(), seconds: Math.round((Date.now() - startedAt) / 1000), ...result, error });
+}

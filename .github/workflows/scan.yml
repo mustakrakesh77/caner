@@ -5,6 +5,10 @@ on:
     - cron: "17 */2 * * *" # yedek zamanlayıcı; asıl tetikleyici Supabase (supabase/scheduler.sql)
   workflow_dispatch: {}
 
+concurrency:
+  group: scan
+  cancel-in-progress: false   # çalışan tarama bitsin, bekleyen bir sonraki tek sıra olsun
+
 jobs:
   scan:
     runs-on: ubuntu-latest

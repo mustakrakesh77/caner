@@ -75,3 +75,25 @@ alter table items add column if not exists owner text;   -- boş = ortak ihtiya�
 -- ===== v6: kısa link çözümü ve eşleşme uyarısı =====
 alter table items add column if not exists source_title text;  -- kısa linkten (ty.gl/...) çözülen gerçek ürün adı
 alter table items add column if not exists match_warn text;    -- seçili ürün linktekiyle uyuşmuyor olabilir uyarısı ('' = kullanıcı onayladı)
+
+-- ===== v7: anahtarsız "Fiyatları yenile" =====
+-- Telefonlar GitHub anahtarı tutmaz; bu fonksiyonu çağırır. Anahtar Supabase Vault'ta ('gh_token'), tetikleme private.trigger_scan() ile yapılır.
+-- Kötüye kullanıma karşı: en fazla 45 saniyede bir tarama istenebilir (herkes için ortak sınır).
+create or replace function public.request_scan() returns jsonb
+language plpgsql security definer set search_path = public, private, extensions
+as $fn$
+declare last_at timestamptz; rid bigint;
+begin
+  select (value->>'at')::timestamptz into last_at from public.settings where key = 'scan_request';
+  if last_at is not null and now() - last_at < interval '45 seconds' then
+    return jsonb_build_object('ok', false, 'reason', 'too_soon',
+      'wait', ceil(extract(epoch from (interval '45 seconds' - (now() - last_at)))));
+  end if;
+  insert into public.settings(key, value) values ('scan_request', jsonb_build_object('at', now()))
+    on conflict (key) do update set value = excluded.value;
+  rid := private.trigger_scan();
+  return jsonb_build_object('ok', rid is not null, 'reason', case when rid is null then 'no_token' else 'started' end, 'at', now());
+end
+$fn$;
+revoke all on function public.request_scan() from public;
+grant execute on function public.request_scan() to anon, authenticated;
